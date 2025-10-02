@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Validador de cupones (Gerencia)</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="manzanas.png">
+  <link rel="stylesheet" href="registrar.css" />
+
+  <!-- Firebase (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <!-- Lector QR -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+
+  <style>
+    .page { max-width: 980px; margin: 110px auto 60px; padding: 16px; }
+    .grid { display:grid; grid-template-columns: 1fr; gap:16px; }
+    @media (min-width: 900px){ .grid { grid-template-columns: 1.1fr .9fr; } }
+
+    .card { background: rgba(25,25,25,.7); border:1px solid rgba(255,255,255,.08);
+            border-radius:16px; padding:16px; }
+    .title { margin:0 0 8px; }
+    .ok{color:#9be49b;} .warn{color:#ffdfaa;} .err{color:#ff9a9a;}
+    .kv { display:grid; grid-template-columns: 130px 1fr; gap:6px 10px; }
+    .kv b{opacity:.9;}
+    .uidbox{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+             background: rgba(255,255,255,.06); padding:8px 10px; border-radius:10px; }
+    .muted{ opacity:.85; }
+    .big { font-size: 18px; font-weight: 800; }
+    .actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .chip { padding:4px 10px; border-radius:999px; font-weight:700; width:max-content; }
+    .chip-ok{ background: rgba(155,228,155,.15); color:#9be49b; border:1px solid rgba(155,228,155,.35);}
+    .chip-warn{ background: rgba(255,223,170,.15); color:#ffdfaa; border:1px solid rgba(255,223,170,.35);}
+    .chip-err{ background: rgba(255,154,154,.15); color:#ff9a9a; border:1px solid rgba(255,154,154,.35);}
+    .qrwrap { background:#000; border-radius:12px; overflow:hidden; border:1px solid rgba(255,255,255,.08); }
+  </style>
+</head>
+<body class="bg-animated">
+  <header class="top-bar">
+    <div class="left-section"><h1 class="applebees-title">Applebee’s</h1></div>
+    <div class="center-section"><p>Validador de cupones — Gerencia</p></div>
+    
+  </header>
+
+  <main class="page">
+    <section class="card">
+      <h3 class="title">Acceso</h3>
+      <div class="kv">
+        <b>Modo</b> <div>Sesión <span class="ok">anónima</span> automática (sin pedir login)</div>
+        <b>UID</b> <div id="mgrUid" class="uidbox">—</div>
+        <b>Permisos</b> <div id="mgrStatus" class="warn">Verificando…</div>
+      </div>
+      <p class="muted" style="margin-top:10px;">
+        Para poder <b>canjear</b>, agrega este UID en RTDB: <code>/managers/&lt;UID&gt; → true</code>.
+        Si ya aparece “Gerente”, no necesitas hacer nada más.
+      </p>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <h3 class="title">1) Escanear o ingresar código</h3>
+
+        <div class="qrwrap" style="padding:10px;">
+          <div id="reader" style="width:100%; max-width:520px; margin:auto;"></div>
+        </div>
+
+        <div class="actions">
+          <input id="manualCode" class="input" placeholder="Pega el código QR (texto) o el CODE" style="flex:1; min-width:260px; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.04); color:#fff;">
+          <button id="btnCargar" class="btn-cta" type="button">Cargar</button>
+        </div>
+        <small class="muted">El QR contiene un JSON con: <em>uid, code, rewardId, cost, exp</em>. También puedes teclear solo el <em>code</em>.</small>
+      </section>
+
+      <section class="card">
+        <h3 class="title">2) Detalle del cupón</h3>
+        <div id="cupStatus" class="chip chip-warn" style="display:none;"></div>
+        <div class="kv" style="margin-top:10px;">
+          <b>Cliente</b>   <div id="cupUser">—</div>
+          <b>Código</b>    <div id="cupCode">—</div>
+          <b>Recompensa</b><div id="cupReward">—</div>
+          <b>Costo</b>     <div id="cupCost">—</div>
+          <b>Vence</b>     <div id="cupExp">—</div>
+          <b>Estado</b>    <div id="cupState">—</div>
+        </div>
+
+        <div class="actions">
+          <button id="btnRedeem" class="btn-cta" type="button" disabled>✅ Canjear</button>
+          <button id="btnRefresh" class="btn-secondary" type="button" disabled>↻ Actualizar</button>
+        </div>
+        <div id="msg" class="warn" style="margin-top:10px;"></div>
+      </section>
+    </div>
+  </main>
+
+<script>
+  // ===== Firebase =====
+  const auth = firebase.auth();
+  const db   = firebase.database();
+
+  // ===== Helpers =====
+  const $ = id => document.getElementById(id);
+  const REWARD_NAMES = {
+    'limonada':'Limonada 16 oz','papas':'Papas fritas','hamburguesa':'Hamburguesa sencilla',
+    'brownie':'Brownie con helado','combo-kids':'Combo infantil'
+  };
+  const fmtDate = (ms)=> ms ? new Date(ms).toLocaleDateString('es-MX',{year:'numeric',month:'2-digit',day:'2-digit'}) : '';
+
+  function showMsg(text, type='warn'){ const el=$('msg'); el.className=type; el.textContent=text||''; }
+
+  let current = null; // { code, ownerUid, rewardId, cost, exp, status }
+
+  // ===== Sesión anónima automática =====
+  async function ensureAnon(){
+    try{
+      const cred = await auth.signInAnonymously();
+      const uid  = cred.user.uid;
+      $('mgrUid').textContent = uid;
+      // ¿Es gerente?
+      db.ref('managers/'+uid).on('value', snap=>{
+        const isMgr = !!snap.val();
+        $('mgrStatus').textContent = isMgr ? 'Gerente' : 'Sin permisos de canje';
+        $('mgrStatus').className = isMgr ? 'ok' : 'warn';
+      });
+    }catch(e){
+      console.error(e);
+      $('mgrStatus').textContent = 'Error de sesión anónima';
+      $('mgrStatus').className = 'err';
+      showMsg('No se pudo abrir la sesión anónima. Revisa firebase-config.js', 'err');
+    }
+  }
+
+  // ===== Lector QR =====
+  function startScanner(){
+    const cfg = { fps: 10, qrbox: { width: 250, height: 250 } };
+    const html5QrCode = new Html5Qrcode("reader");
+    Html5Qrcode.getCameras().then(cams=>{
+      const camId = (cams && cams.length) ? (cams.find(c=>/back|rear|environment/i.test(c.label))?.id || cams[0].id) : null;
+      html5QrCode.start(camId, cfg, onScan, err=>{}).catch(()=>{ /* ignore */ });
+    }).catch(()=>{ /* ignore */ });
+
+    function onScan(text){
+      tryParsePayload(text);
+    }
+  }
+
+  // Acepta payload JSON (del QR) o solo el code
+  function tryParsePayload(raw){
+    let parsed=null;
+    try{ parsed = JSON.parse(raw); }catch{}
+    if (parsed && parsed.code) {
+      loadCoupon(parsed.code, parsed.uid, parsed);
+    } else {
+      const code = String(raw||'').trim();
+      if (!code) return;
+      loadCoupon(code, null, null);
+    }
+  }
+
+  // Carga desde RTDB los nodos /redeems/{code} y espejo de usuario
+  async function loadCoupon(code, hintUid=null, qrObj=null){
+    showMsg('Buscando cupón…');
+    $('btnRedeem').disabled = true; $('btnRefresh').disabled = true;
+
+    try{
+      // /redeems/{code}
+      const rSnap = await db.ref('redeems/'+code).once('value');
+      if (!rSnap.exists()){ showMsg('No existe el código en el servidor.', 'err'); fillUI(null); return; }
+      const r = rSnap.val(); // {userId, rewardId, cost, status, expiresAt, ...}
+
+      // espejo del usuario (para nombre recompensa, estado actual)
+      const uRef = db.ref('users/'+r.userId+'/redemptions/'+code);
+      const uSnap = await uRef.once('value');
+      const u = uSnap.val() || {};
+
+      // Usar info del QR si aporta (no pisa lo del server)
+      const rewardId = r.rewardId || qrObj?.rewardId || u.rewardId || '';
+      const cost     = Number(r.cost ?? qrObj?.cost ?? u.cost ?? 0);
+      const exp      = Number(r.expiresAt ?? qrObj?.exp ?? u.expiresAt ?? 0);
+      const status   = String(r.status || u.status || 'pending').toLowerCase();
+
+      current = { code, ownerUid:r.userId, rewardId, cost, exp, status };
+
+      fillUI(current);
+      $('btnRefresh').disabled = false;
+
+      // habilitar canje si está pendiente y no expirado
+      const notExpired = !exp || exp > Date.now();
+      $('btnRedeem').disabled = !(status === 'pending' || status === 'pendiente') || !notExpired;
+
+      if (!notExpired) showMsg('Cupón vencido.', 'err');
+      else showMsg('Cupón listo.', 'ok');
+
+    }catch(e){
+      console.error(e);
+      showMsg('Error leyendo el cupón.', 'err');
+      fillUI(null);
+    }
+  }
+
+  function fillUI(data){
+    const st = $('cupStatus');
+    if (!data){
+      $('cupUser').textContent='—'; $('cupCode').textContent='—';
+      $('cupReward').textContent='—'; $('cupCost').textContent='—';
+      $('cupExp').textContent='—'; $('cupState').textContent='—';
+      st.style.display='none';
+      return;
+    }
+    $('cupUser').textContent = data.ownerUid || '—';
+    $('cupCode').textContent = data.code || '—';
+    $('cupReward').textContent = REWARD_NAMES[data.rewardId] || data.rewardId || '—';
+    $('cupCost').textContent = (data.cost||0) + ' pts';
+    $('cupExp').textContent = fmtDate(data.exp);
+    const human = (data.status==='pending'?'Pendiente': (data.status==='redeemed'?'Canjeado':data.status));
+    $('cupState').textContent = human;
+
+    st.style.display='inline-block';
+    st.className = 'chip ' + (data.status==='pending' ? 'chip-warn' : (data.status==='redeemed' ? 'chip-ok' : 'chip-err'));
+    st.textContent = human;
+  }
+
+  // ===== Canjear =====
+  async function redeemNow(){
+    if (!current) return;
+    const mgr = auth.currentUser;
+    const mgrUid = mgr?.uid;
+    const code = current.code, owner = current.ownerUid;
+
+    $('btnRedeem').disabled = true;
+    showMsg('Canjeando…');
+
+    // Actualización multi-ruta
+    const updates = {};
+    updates['/redeems/'+code+'/status']      = 'redeemed';
+    updates['/redeems/'+code+'/redeemedAt']  = Date.now();
+    updates['/redeems/'+code+'/redeemedBy']  = mgrUid || 'anon';
+
+    updates['/users/'+owner+'/redemptions/'+code+'/status']     = 'canjeado';
+    updates['/users/'+owner+'/redemptions/'+code+'/redeemedAt'] = Date.now();
+    updates['/users/'+owner+'/redemptions/'+code+'/redeemedBy'] = mgrUid || 'anon';
+
+    try{
+      await db.ref().update(updates);
+      current.status = 'redeemed';
+      fillUI(current);
+      showMsg('✅ Canjeado con éxito.', 'ok');
+    }catch(e){
+      console.error(e);
+      // Si ves "Permission denied", agrega este UID a /managers
+      showMsg('Permiso denegado. Agrega este UID a /managers: '+(mgrUid||'—'), 'err');
+      $('btnRedeem').disabled = false;
+    }
+  }
+
+  // ===== Eventos =====
+  $('btnCargar').addEventListener('click', ()=> tryParsePayload($('manualCode').value));
+  $('btnRedeem').addEventListener('click', redeemNow);
+  $('btnRefresh').addEventListener('click', ()=> { if(current) loadCoupon(current.code); });
+
+  // ===== Init =====
+  (async function init(){
+    await ensureAnon();
+    startScanner();
+  })();
+</script>
+</body>
+</html>
