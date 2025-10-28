@@ -56,3 +56,40 @@ input:checked + .slider:before{ transform:translateX(20px); }
 
 .msg{ margin-top:8px; min-height:18px; }
 .foot{ text-align:center; margin: 10px 0 30px; color:var(--muted); }
+
+/* Asegura que el <video> que inyecta html5-qrcode llene el área */
+.qr-region video{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;   /* recorta para ocupar todo el cuadro */
+}
+
+/* El overlay siempre por encima del video */
+.qr-region{ position: relative; overflow: hidden; }
+.scan-overlay{
+  position: absolute;
+  inset: 0;
+  z-index: 2;                /* <- encima del <video> */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: #fff;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0,0,0,.6);
+}
+
+/* Variantes de estado usadas por setScanOverlay(text, kind) */
+.scan-overlay.ok    { color: #86e38f; text-shadow: 0 0 0; }
+.scan-overlay.warn  { color: #ffdfaa; text-shadow: 0 0 0; }
+.scan-overlay.err   { color: #ff9a9a; text-shadow: 0 0 0; }
+
+/* (Opcional) pastilla centrada para mejor legibilidad */
+.scan-overlay::before{
+  content: attr(data-text);
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.45);
+  border: 1px solid rgba(255,255,255,.12);
+}
