@@ -10,7 +10,7 @@ function showMsg(el, text, kind='info') {
   if (!el) return;
   el.textContent = text || '';
   el.className = 'msg ' + (kind || 'info');
-  if (text) el.style.display = 'block';
+  el.style.display = text ? 'block' : 'none';
 }
 
 /************* Firebase *************/
@@ -30,9 +30,11 @@ const btnLogout      = $('btnLogout');
 
 const dash        = $('dashboard');
 const qrRegionEl  = $('qrRegion');
+const scanOverlay = $('scanOverlay');
 const cameraSel   = $('cameraSelect');
 const btnStart    = $('btnStartScan');
 const btnStop     = $('btnStopScan');
+const btnResume   = $('btnResumeScan');
 const torchSwitch = $('switchTorch');
 
 const codeInput   = $('codeInput');
@@ -57,38 +59,43 @@ const btnReloadAudit = $('btnReloadAudit');
 
 /************* Estado *************/
 let html5Scanner = null;
-let currentDetect = null;   // { code, uid, userPath, globalPath, snapGlobal, snapUser }
+let scanningBusy = false;   // evita disparos múltiples
 let torchOn = false;
+let currentDetect = null;   // { code, uid, ... }
 
 /************* Utils *************/
 const fmt = (ms) => ms ? new Date(ms).toLocaleString('es-MX',{dateStyle:'medium', timeStyle:'short'}) : '—';
 const ymd = (ms) => ms ? new Date(ms).toLocaleDateString('es-MX',{year:'numeric',month:'2-digit',day:'2-digit'}) : '—';
 
 function parseQrText(text){
-  // 1) JSON payload
+  // 1) JSON payload {v, brand, uid, code, rewardId, cost, exp}
   try {
     const obj = JSON.parse(text);
     if (obj && obj.code) return { type:'json', ...obj };
   } catch(e){}
-  // 2) Solo código (alfanumérico 8-12 típico)
-  const s = String(text||'').trim();
+  // 2) Solo código (alfanumérico 8-14)
+  const s = String(text||'').trim().toUpperCase();
   if (/^[A-Z0-9]{8,14}$/.test(s)) return { type:'code', code:s };
   return null;
 }
 
-async function ensureCameras(){
-  try{
-    const devices = await Html5Qrcode.getCameras();
-    cameraSel.innerHTML = '';
-    devices.forEach((d,i)=>{
-      const opt = document.createElement('option');
-      opt.value = d.id;
-      opt.textContent = `${d.label || 'Camera '+(i+1)}`;
-      cameraSel.appendChild(opt);
-    });
-  }catch(e){
-    console.warn('No cameras', e);
-  }
+function uiOverlay(text, kind='hint') {
+  if (!scanOverlay) return;
+  scanOverlay.textContent = text || '';
+  scanOverlay.className = 'scan-overlay ' + kind;
+  scanOverlay.style.display = text ? 'block' : 'none';
+}
+
+function beepAndVibrate() {
+  try { navigator.vibrate?.(80); } catch {}
+  try {
+    // beep muy corto (440Hz) con WebAudio si disponible
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.type='sine'; o.frequency.value=880; g.gain.value=0.02;
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); setTimeout(()=>{ o.stop(); ctx.close(); }, 120);
+  } catch {}
 }
 
 function setWelcome(user){
@@ -102,20 +109,42 @@ function setLoggedOut(){
   loginCard.hidden = false;
 }
 
+async function ensureCamerasAndSelectBest() {
+  try{
+    const devices = await Html5Qrcode.getCameras();
+    cameraSel.innerHTML = '';
+    if (!devices || !devices.length) {
+      uiOverlay('No se detectó cámara. Revisa permisos.', 'warn');
+      return;
+    }
+    // llenar select
+    devices.forEach((d,i)=>{
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.label || `Cámara ${i+1}`;
+      cameraSel.appendChild(opt);
+    });
+    // intentar seleccionar trasera
+    const rear = devices.find(d => /back|rear|environment/i.test(d.label||''));
+    if (rear) cameraSel.value = rear.id;
+    else cameraSel.value = devices[devices.length-1].id;
+  }catch(e){
+    console.warn('getCameras error', e);
+    uiOverlay('Permite el uso de la cámara en el navegador.', 'warn');
+  }
+}
+
 /************* Autenticación *************/
 auth.onAuthStateChanged(async (user)=>{
   if(!user){ setLoggedOut(); return; }
-  // Verifica permiso de gerente
+
   showMsg(loginMsg, '', 'info');
   $('btnLogin')?.setAttribute('disabled', 'disabled');
 
-  console.log('UID:', user.uid);
   try{
     const snap = await db.ref('managers/'+user.uid).once('value');
-    console.log('managers read ok:', snap.exists(), snap.val());
     if (!snap.exists()) {
       showMsg(loginMsg, 'Tu usuario no está autorizado como gerente.', 'err');
-      // Te dejamos en pantalla de login pero con sesión abierta por si deseas salir
       return;
     }
   }catch(err){
@@ -132,7 +161,8 @@ auth.onAuthStateChanged(async (user)=>{
   loginCard.hidden = true;
   dash.hidden = false;
 
-  await ensureCameras();
+  await ensureCamerasAndSelectBest();
+  await startScanner();              // ⬅️ auto-inicio del escáner
   loadAudit();
 });
 
@@ -141,9 +171,7 @@ loginForm?.addEventListener('submit', async (ev)=>{
   showMsg(loginMsg, 'Ingresando…', 'info');
   try{
     await auth.signInWithEmailAndPassword(loginEmail.value.trim(), loginPass.value);
-    // El flujo continúa en onAuthStateChanged
   }catch(e){
-    console.error(e);
     const map = {
       'auth/invalid-email': 'Correo inválido.',
       'auth/user-not-found': 'Usuario no encontrado.',
@@ -160,21 +188,38 @@ btnLogout?.addEventListener('click', async ()=>{
 
 /************* Escáner *************/
 async function startScanner(){
-  if (html5Scanner) return;
-  const id = cameraSel.value || undefined;
-  html5Scanner = new Html5Qrcode(qrRegionEl.id);
-  const cfg = {
-    fps: 10,
-    qrbox: { width: 280, height: 280 },
-    formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
-    experimentalFeatures: { useBarCodeDetectorIfSupported: true }
-  };
-  await html5Scanner.start(
-    { deviceId: { exact: id }},
-    cfg,
-    onScanSuccess,
-    onScanError
-  );
+  try{
+    if (html5Scanner) return;
+
+    // tamaño dinámico
+    const isMobile = window.matchMedia('(max-width: 640px)').matches;
+    const size = isMobile ? 260 : 320;
+    qrRegionEl.style.minHeight = (size+40)+'px';
+
+    const id = cameraSel.value || undefined;
+    html5Scanner = new Html5Qrcode(qrRegionEl.id);
+
+    const cfg = {
+      fps: 12,
+      qrbox: { width: size, height: size },
+      formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+    };
+
+    await html5Scanner.start(
+      { deviceId: { exact: id }},
+      cfg,
+      onScanSuccess,
+      onScanError
+    );
+
+    uiOverlay('Apunta el QR dentro del recuadro', 'hint');
+    torchSwitch.checked = false;
+    torchOn = false;
+  }catch(e){
+    console.error('startScanner', e);
+    uiOverlay('No se pudo iniciar la cámara: ' + (e?.message||e), 'err');
+  }
 }
 
 async function stopScanner(){
@@ -184,7 +229,10 @@ async function stopScanner(){
       await html5Scanner.clear();
       html5Scanner = null;
     }
-  }catch{}
+    uiOverlay('Cámara detenida', 'warn');
+  }catch(e){
+    console.warn('stopScanner', e);
+  }
 }
 
 async function toggleTorch(on){
@@ -197,13 +245,29 @@ async function toggleTorch(on){
 
 btnStart?.addEventListener('click', startScanner);
 btnStop?.addEventListener('click', stopScanner);
+btnResume?.addEventListener('click', async ()=>{
+  redeemCard.hidden = true;
+  showMsg(redeemMsg, '', 'info');
+  currentDetect = null;
+  scanningBusy = false;
+  await startScanner();
+  uiOverlay('Apunta el QR dentro del recuadro', 'hint');
+});
 torchSwitch?.addEventListener('change', (e)=> toggleTorch(e.target.checked));
 
-function onScanError(err){ /* opcional: silenciar */ }
+function onScanError(err){ /* silencioso */ }
 
 async function onScanSuccess(decodedText){
-  console.log('SCAN OK:', decodedText);
+  if (scanningBusy) return;       // freno anti-doble
+  scanningBusy = true;
+
+  beepAndVibrate();
+  uiOverlay('QR detectado ✓', 'ok');
+  await stopScanner();            // pausa cámara para mostrar datos
+
   await processInput(decodedText);
+  // Si el cupón ya estaba canjeado, habilitamos reanudar
+  btnResume?.classList.remove('ghost');
 }
 
 /************* Lookup (QR o Código) *************/
@@ -221,35 +285,34 @@ async function processInput(inputText){
   const parsed = parseQrText(inputText);
   if (!parsed) {
     showMsg(redeemMsg, 'QR/código no reconocido.', 'err');
+    scanningBusy = false;
     return;
   }
 
   try{
-    // Estrategia:
-    // 1) Si traemos uid (payload JSON), usamos uid+code directo.
-    // 2) Si no, buscamos /redeems/{code} para obtener userId y reward info.
+    // 1) Determinar uid y code
     let uid=null, code=null;
 
     if (parsed.type === 'json' && parsed.uid && parsed.code) {
       uid  = parsed.uid;
       code = parsed.code;
-      console.log('LOOKUP via payload uid+code', uid, code);
     } else {
       code = parsed.code;
       const snapG = await db.ref('redeems/'+code).once('value');
       if (!snapG.exists()){
         showMsg(redeemMsg, 'No existe este cupón en el sistema.', 'err');
+        scanningBusy = false;
         return;
       }
       uid = String(snapG.val().userId || '');
       if (!uid) {
         showMsg(redeemMsg, 'El cupón no tiene usuario asociado.', 'err');
+        scanningBusy = false;
         return;
       }
-      console.log('LOOKUP via global redeems => uid', uid);
     }
 
-    // Lee global y espejo usuario
+    // 2) Leer ambos nodos
     const [snapGlobal, snapUser] = await Promise.all([
       db.ref('redeems/'+code).once('value'),
       db.ref(`users/${uid}/redemptions/${code}`).once('value')
@@ -257,13 +320,13 @@ async function processInput(inputText){
 
     if (!snapGlobal.exists() && !snapUser.exists()) {
       showMsg(redeemMsg, 'Cupón no encontrado.', 'err');
+      scanningBusy = false;
       return;
     }
 
     const g = snapGlobal.val() || {};
     const u = snapUser.val()   || {};
 
-    // Preferimos datos del espejo de usuario (más completos para UI)
     const rewardName = u.rewardName || u.rewardId || g.rewardId || '—';
     const cost       = Number(u.cost || g.cost || 0);
     const status     = (u.status || g.status || 'pendiente').toLowerCase();
@@ -271,7 +334,7 @@ async function processInput(inputText){
     const expiresAt  = Number(u.expiresAt || g.expiresAt || 0);
     const stateTxt   = status === 'canjeado' ? 'Canjeado' : 'Pendiente';
 
-    // Pinta UI
+    // 3) Pintar info
     rRewardName.textContent = rewardName;
     rCost.textContent       = String(cost);
     rExpires.textContent    = ymd(expiresAt);
@@ -284,15 +347,12 @@ async function processInput(inputText){
     rState.textContent      = stateTxt;
 
     redeemCard.hidden = false;
-    // Habilitar/Deshabilitar canje según estado
     btnRedeem.disabled = (status !== 'pendiente');
 
-    // Guarda contexto para canjear
     currentDetect = {
       code, uid,
       globalPath: 'redeems/'+code,
       userPath:   `users/${uid}/redemptions/${code}`,
-      snapGlobal, snapUser,
       cost, expiresAt, rewardId: (u.rewardId || g.rewardId || '')
     };
 
@@ -303,6 +363,9 @@ async function processInput(inputText){
   }catch(e){
     console.error(e);
     showMsg(redeemMsg, 'Error al consultar el cupón: ' + e.message, 'err');
+  } finally {
+    // Permitimos reanudar si se desea seguir escaneando
+    scanningBusy = false;
   }
 }
 
@@ -315,13 +378,9 @@ btnRedeem?.addEventListener('click', async ()=>{
   const { code, uid, globalPath, userPath, cost, expiresAt, rewardId } = currentDetect;
   const note = (rNote.value || '').trim();
 
-  // Seguridad mínima en cliente
-  if (!code || !uid) { showMsg(redeemMsg, 'Contexto incompleto.', 'err'); return; }
-
   btnRedeem.disabled = true;
   showMsg(redeemMsg, 'Canjeando…', 'info');
 
-  // Multi-path update: redeems + user/redemptions + log
   const now = Date.now();
   const logKey = db.ref('redeemLogs').push().key;
 
@@ -354,7 +413,11 @@ btnRedeem?.addEventListener('click', async ()=>{
     rStatus.textContent = 'Canjeado';
     rState.textContent  = 'Canjeado';
     btnRedeem.disabled  = true;
-    loadAudit(); // refrescar tabla
+
+    // listo para seguir escaneando el siguiente
+    btnResume?.classList.remove('ghost');
+    uiOverlay('Listo. Pulsa “Reanudar cámara” para el siguiente QR', 'hint');
+    loadAudit();
   }catch(e){
     console.error(e);
     showMsg(redeemMsg, 'No se pudo canjear: ' + e.message, 'err');
