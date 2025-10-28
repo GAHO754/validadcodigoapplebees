@@ -71,10 +71,17 @@
 
           <div id="qrRegion" class="qr-region" aria-label="Área de escaneo"></div>
 
+          <!-- ⬇️ Overlay de estado para el escáner -->
+          <div id="scanOverlay" class="scan-overlay" aria-live="polite">
+            Apunta el QR dentro del recuadro
+          </div>
+
           <div class="row mt8">
             <select id="cameraSelect" class="select" aria-label="Seleccionar cámara"></select>
             <button id="btnStartScan" class="btn" type="button">Iniciar</button>
             <button id="btnStopScan" class="btn ghost" type="button">Detener</button>
+            <!-- ⬇️ Botón para reanudar cámara tras leer/canjear -->
+            <button id="btnResumeScan" class="btn ghost" type="button">Reanudar cámara</button>
           </div>
           <small class="muted">También puedes teclear el código abajo.</small>
         </article>
