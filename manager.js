@@ -9,8 +9,21 @@ function showMsg(el, text, kind='info') {
   if (text) el.style.display = 'block';
 }
 
-function setScanOverlay(text, kind=''){
-  const ov = $('scanOverlay');
+function ensureOverlay() {
+  // html5-qrcode limpia el contenedor al iniciar; añadimos el overlay si no existe
+  let ov = $('scanOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'scanOverlay';
+    ov.className = 'scan-overlay';
+    ov.dataset.text = '';
+    qrRegionEl?.appendChild(ov);
+  }
+  return ov;
+}
+
+function setScanOverlay(text, kind='') {
+  const ov = ensureOverlay();
   if (!ov) return;
   ov.dataset.text = text || '';
   ov.className = 'scan-overlay ' + (kind || '');
@@ -37,6 +50,8 @@ const cameraSel   = $('cameraSelect');
 const btnStart    = $('btnStartScan');
 const btnStop     = $('btnStopScan');
 const torchSwitch = $('switchTorch');
+
+// (opcionales, por si luego los agregas en el HTML)
 const btnPickFile = $('btnPickFile');
 const qrFileInput = $('qrFile');
 
@@ -64,17 +79,18 @@ const btnReloadAudit = $('btnReloadAudit');
 let html5Scanner = null;
 let currentDetect = null;
 let torchOn = false;
-let lastScanTs = 0;
 
 // ====== Utils ======
 const fmt = (ms) => ms ? new Date(ms).toLocaleString('es-MX',{dateStyle:'medium', timeStyle:'short'}) : '—';
 const ymd = (ms) => ms ? new Date(ms).toLocaleDateString('es-MX',{year:'numeric',month:'2-digit',day:'2-digit'}) : '—';
 
 function parseQrText(text){
+  // 1) payload JSON generado por tu app (trae uid+code)
   try {
     const obj = JSON.parse(text);
     if (obj && obj.code) return { type:'json', ...obj };
   } catch(e){}
+  // 2) código simple alfanumérico
   const s = String(text||'').trim();
   if (/^[A-Z0-9]{8,14}$/.test(s)) return { type:'code', code:s };
   return null;
@@ -84,7 +100,7 @@ async function ensureCameras(){
   try{
     const devices = await Html5Qrcode.getCameras();
     cameraSel.innerHTML = '';
-    // Heurística: intentar poner primero la trasera
+    // preferir trasera
     devices.sort((a,b)=>{
       const ab = /back|rear|environment/i.test(a.label) ? -1 : 0;
       const bb = /back|rear|environment/i.test(b.label) ? -1 : 0;
@@ -138,7 +154,8 @@ auth.onAuthStateChanged(async (user)=>{
   loginCard.hidden = true;
   dash.hidden = false;
 
-  await ensureCameras();
+  ensureOverlay();         // prepara overlay visual
+  await ensureCameras();   // llena el selector
   loadAudit();
 });
 
@@ -165,7 +182,6 @@ btnLogout?.addEventListener('click', async ()=>{
 
 // ====== Scanner ======
 function calcQrBox(){
-  // Un cuadro amplio mejora la detección
   const w = Math.max(280, Math.min(qrRegionEl.clientWidth - 24, 420));
   return { width: w, height: w };
 }
@@ -175,8 +191,8 @@ async function startScanner(){
   setScanOverlay('Enfoca el QR', '');
   console.log('[QR] startScanner()');
 
-  const deviceId = cameraSel.value || undefined;
-  html5Scanner = new Html5Qrcode(qrRegionEl.id, { verbose: true }); // verbose: true
+  const deviceId = cameraSel?.value || undefined;
+  html5Scanner = new Html5Qrcode(qrRegionEl.id, { verbose: true });
 
   const cfg = {
     fps: 18,
@@ -190,15 +206,40 @@ async function startScanner(){
   try{
     await html5Scanner.start(cameraConfig, cfg, onScanSuccess, onScanError);
     console.log('[QR] Cámara iniciada OK', cameraConfig, cfg);
+    ensureOverlay(); // vuelve a añadir el overlay si el contenedor fue reseteado
   }catch(e){
     console.error('[QR] No se pudo iniciar la cámara', e);
     setScanOverlay('No se pudo iniciar la cámara', 'err');
-    showMsg(redeemMsg, 'Permite el uso de la cámara o prueba “Subir imagen del QR”.', 'err');
+    showMsg(redeemMsg, 'Permite la cámara o usa “Subir imagen del QR”.', 'err');
+  }
+}
+
+async function stopScanner(){
+  try{
+    if (html5Scanner) {
+      await html5Scanner.stop();
+      await html5Scanner.clear();
+      html5Scanner = null;
+      setScanOverlay('Escáner detenido', 'warn');
+    }
+  }catch(e){
+    console.warn('stopScanner', e);
+  }
+}
+
+async function toggleTorch(on){
+  torchOn = !!on;
+  if (!html5Scanner) return;
+  try{
+    await html5Scanner.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
+  }catch(e){
+    console.warn('torch not supported', e);
+    torchSwitch && (torchSwitch.checked = false);
   }
 }
 
 function onScanError(err){
-  // Ruido normal; comenta si molesta
+  // ruido normal; déjalo en blanco o loguea si necesitas
   // console.debug('[QR] onScanError:', err);
 }
 
@@ -208,8 +249,13 @@ async function onScanSuccess(decodedText){
   await processInput(decodedText);
 }
 
-// ====== Fallback: archivo ======
-btnPickFile?.addEventListener('click', ()=> qrFileInput.click());
+// Conectar botones (¡esto faltaba!)
+btnStart?.addEventListener('click', startScanner);
+btnStop?.addEventListener('click', stopScanner);
+torchSwitch?.addEventListener('change', (e)=> toggleTorch(e.target.checked));
+
+// ====== Fallback: archivo (si agregas los elementos en HTML) ======
+btnPickFile?.addEventListener('click', ()=> qrFileInput?.click());
 qrFileInput?.addEventListener('change', async (e)=>{
   const file = e.target.files?.[0];
   if (!file) return;
@@ -228,13 +274,13 @@ qrFileInput?.addEventListener('change', async (e)=>{
     setScanOverlay('No se pudo leer la imagen', 'err');
     showMsg(redeemMsg, 'No se pudo leer la imagen: ' + e.message, 'err');
   } finally {
-    qrFileInput.value = '';
+    if (qrFileInput) qrFileInput.value = '';
   }
 });
 
 // ====== Lookup (QR o Código) ======
 btnLookup?.addEventListener('click', async ()=>{
-  const s = codeInput.value.trim().toUpperCase();
+  const s = (codeInput?.value || '').trim().toUpperCase();
   if (!s) { alert('Ingresa un código.'); return; }
   await processInput(s);
 });
@@ -412,4 +458,3 @@ async function loadAudit(){
 }
 
 btnReloadAudit?.addEventListener('click', loadAudit);
-
