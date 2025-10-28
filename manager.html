@@ -13,9 +13,10 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <!-- Configuración -->
   <script src="firebase-config.js"></script>
 
-  <!-- QR decode -->
+  <!-- Lector QR -->
   <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body class="bg">
@@ -28,72 +29,62 @@
     </div>
     <div class="actions" id="sessionActions" hidden>
       <span id="mgrEmail" class="muted"></span>
-      <button id="btnLogout" class="btn ghost" type="button" title="Cerrar sesión">Salir</button>
+      <button id="btnLogout" class="btn ghost" type="button">Salir</button>
     </div>
   </header>
 
   <main class="container">
-    <!-- ====== LOGIN ====== -->
+    <!-- LOGIN -->
     <section id="loginCard" class="card auth">
       <h2>Acceso de gerentes</h2>
       <p class="muted">Ingresa con tu correo corporativo.</p>
       <form id="loginForm" class="grid" autocomplete="on">
         <label class="field">
           <span>Correo</span>
-          <input id="loginEmail" type="email" placeholder="gerente@empresa.com" required autocomplete="username">
+          <input id="loginEmail" type="email" placeholder="gerente@empresa.com" required>
         </label>
         <label class="field">
           <span>Contraseña</span>
-          <input id="loginPass" type="password" placeholder="••••••••" required autocomplete="current-password">
+          <input id="loginPass" type="password" placeholder="••••••••" required>
         </label>
         <button id="btnLogin" type="submit" class="btn primary">Entrar</button>
       </form>
       <p id="loginMsg" class="msg"></p>
     </section>
 
-    <!-- ====== DASHBOARD ====== -->
+    <!-- DASHBOARD -->
     <section id="dashboard" class="dash" hidden>
       <div class="grid2">
-        <!-- Panel de escaneo -->
+        <!-- ESCÁNER -->
         <article class="card">
           <div class="card-header">
             <h3>Escanear código QR</h3>
-            <div class="row">
-              <label class="switch" title="Encender linterna">
+            <div class="toggle">
+              <label class="switch">
                 <input id="switchTorch" type="checkbox">
                 <span class="slider"></span>
               </label>
-              <small class="muted">Linterna</small>
+              <small>Linterna</small>
             </div>
           </div>
 
-          <div id="qrRegion" class="qr-region" aria-label="Área de escaneo">
-            <div id="scanOverlay" class="scan-overlay" data-text="Enfoca el QR"></div>
-          </div>
+          <div id="qrRegion" class="qr-region" aria-label="Área de escaneo"></div>
 
           <div class="row mt8">
             <select id="cameraSelect" class="select" aria-label="Seleccionar cámara"></select>
             <button id="btnStartScan" class="btn" type="button">Iniciar</button>
             <button id="btnStopScan" class="btn ghost" type="button">Detener</button>
           </div>
-
-          <div class="row mt8">
-            <input id="qrFile" type="file" accept="image/*" hidden>
-            <button id="btnPickFile" class="btn" type="button">Subir imagen del QR</button>
-            <small class="muted">Si la cámara no detecta, puedes subir una foto del cupón.</small>
-          </div>
-
-          <small class="muted">También puedes teclear el código abajo.</small>
+          <small class="muted">También puedes ingresar el código manualmente.</small>
         </article>
 
-        <!-- Buscar por código -->
+        <!-- VALIDAR CÓDIGO -->
         <article class="card">
           <h3>Buscar/validar por código</h3>
           <div class="row">
-            <input id="codeInput" type="text" class="mono" placeholder="Ej. AB3K9T6P2C" inputmode="latin-prose" autocapitalize="characters">
+            <input id="codeInput" type="text" class="mono" placeholder="Ej. AB3K9T6P2C">
             <button id="btnLookup" class="btn" type="button">Buscar</button>
           </div>
-          <p class="muted">El código aparece junto al QR del cliente.</p>
 
           <hr class="sep">
 
@@ -142,7 +133,7 @@
         </article>
       </div>
 
-      <!-- Últimos canjes (auditoría) -->
+      <!-- AUDITORÍA -->
       <article class="card mt16">
         <div class="card-header">
           <h3>Últimos canjes</h3>
