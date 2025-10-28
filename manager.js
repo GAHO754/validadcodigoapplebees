@@ -173,8 +173,10 @@ function calcQrBox(){
 async function startScanner(){
   if (html5Scanner) return;
   setScanOverlay('Enfoca el QR', '');
+  console.log('[QR] startScanner()');
+
   const deviceId = cameraSel.value || undefined;
-  html5Scanner = new Html5Qrcode(qrRegionEl.id, { verbose: false });
+  html5Scanner = new Html5Qrcode(qrRegionEl.id, { verbose: true }); // verbose: true
 
   const cfg = {
     fps: 18,
@@ -183,62 +185,25 @@ async function startScanner(){
     formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
     experimentalFeatures: { useBarCodeDetectorIfSupported: true },
   };
-
-  // Prefer environment camera si no hay id
   const cameraConfig = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" };
 
   try{
-    await html5Scanner.start(
-      cameraConfig,
-      cfg,
-      onScanSuccess,
-      onScanError
-    );
+    await html5Scanner.start(cameraConfig, cfg, onScanSuccess, onScanError);
+    console.log('[QR] Cámara iniciada OK', cameraConfig, cfg);
   }catch(e){
-    console.error('startScanner error', e);
+    console.error('[QR] No se pudo iniciar la cámara', e);
     setScanOverlay('No se pudo iniciar la cámara', 'err');
+    showMsg(redeemMsg, 'Permite el uso de la cámara o prueba “Subir imagen del QR”.', 'err');
   }
 }
-
-async function stopScanner(){
-  try{
-    if (html5Scanner) {
-      await html5Scanner.stop();
-      await html5Scanner.clear();
-      html5Scanner = null;
-      setScanOverlay('Escáner detenido', 'warn');
-    }
-  }catch(e){
-    console.warn(e);
-  }
-}
-
-async function toggleTorch(on){
-  torchOn = !!on;
-  if (!html5Scanner) return;
-  try{
-    await html5Scanner.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
-  }catch(e){ /* algunos navegadores no soportan torch */ }
-}
-
-btnStart?.addEventListener('click', startScanner);
-btnStop?.addEventListener('click', stopScanner);
-torchSwitch?.addEventListener('change', (e)=> toggleTorch(e.target.checked));
-window.addEventListener('resize', ()=>{
-  // si cambia tamaño, el próximo start usará el nuevo qrbox
-  if (!html5Scanner) setScanOverlay('Enfoca el QR', '');
-});
 
 function onScanError(err){
-  // silenciado
+  // Ruido normal; comenta si molesta
+  // console.debug('[QR] onScanError:', err);
 }
 
 async function onScanSuccess(decodedText){
-  const now = Date.now();
-  // debouncer para evitar dobles lecturas
-  if (now - lastScanTs < 1200) return;
-  lastScanTs = now;
-
+  console.log('[QR] SCAN OK:', decodedText);
   setScanOverlay('QR detectado ✓', 'ok');
   await processInput(decodedText);
 }
@@ -447,3 +412,4 @@ async function loadAudit(){
 }
 
 btnReloadAudit?.addEventListener('click', loadAudit);
+
