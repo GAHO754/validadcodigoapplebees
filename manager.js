@@ -1,8 +1,4 @@
-// manager.js — Portal de gerentes (escaneo y canje)
-// Requiere: firebase-app-compat, firebase-auth-compat, firebase-database-compat,
-//           html5-qrcode y firebase-config.js cargados en manager.html
-
-/************* Shortcuts UI *************/
+// ====== Helpers UI ======
 const $  = (id) => document.getElementById(id);
 const by = (sel) => document.querySelector(sel);
 
@@ -10,14 +6,21 @@ function showMsg(el, text, kind='info') {
   if (!el) return;
   el.textContent = text || '';
   el.className = 'msg ' + (kind || 'info');
-  el.style.display = text ? 'block' : 'none';
+  if (text) el.style.display = 'block';
 }
 
-/************* Firebase *************/
+function setScanOverlay(text, kind=''){
+  const ov = $('scanOverlay');
+  if (!ov) return;
+  ov.dataset.text = text || '';
+  ov.className = 'scan-overlay ' + (kind || '');
+}
+
+// ====== Firebase ======
 const auth = firebase.auth();
 const db   = firebase.database();
 
-/************* DOM refs *************/
+// ====== DOM refs ======
 const loginCard   = $('loginCard');
 const loginForm   = $('loginForm');
 const loginEmail  = $('loginEmail');
@@ -30,12 +33,12 @@ const btnLogout      = $('btnLogout');
 
 const dash        = $('dashboard');
 const qrRegionEl  = $('qrRegion');
-const scanOverlay = $('scanOverlay');
 const cameraSel   = $('cameraSelect');
 const btnStart    = $('btnStartScan');
 const btnStop     = $('btnStopScan');
-const btnResume   = $('btnResumeScan');
 const torchSwitch = $('switchTorch');
+const btnPickFile = $('btnPickFile');
+const qrFileInput = $('qrFile');
 
 const codeInput   = $('codeInput');
 const btnLookup   = $('btnLookup');
@@ -57,45 +60,45 @@ const redeemMsg   = $('redeemMsg');
 const auditTableBody = by('#auditTable tbody');
 const btnReloadAudit = $('btnReloadAudit');
 
-/************* Estado *************/
+// ====== Estado ======
 let html5Scanner = null;
-let scanningBusy = false;   // evita disparos múltiples
+let currentDetect = null;
 let torchOn = false;
-let currentDetect = null;   // { code, uid, ... }
+let lastScanTs = 0;
 
-/************* Utils *************/
+// ====== Utils ======
 const fmt = (ms) => ms ? new Date(ms).toLocaleString('es-MX',{dateStyle:'medium', timeStyle:'short'}) : '—';
 const ymd = (ms) => ms ? new Date(ms).toLocaleDateString('es-MX',{year:'numeric',month:'2-digit',day:'2-digit'}) : '—';
 
 function parseQrText(text){
-  // 1) JSON payload {v, brand, uid, code, rewardId, cost, exp}
   try {
     const obj = JSON.parse(text);
     if (obj && obj.code) return { type:'json', ...obj };
   } catch(e){}
-  // 2) Solo código (alfanumérico 8-14)
-  const s = String(text||'').trim().toUpperCase();
+  const s = String(text||'').trim();
   if (/^[A-Z0-9]{8,14}$/.test(s)) return { type:'code', code:s };
   return null;
 }
 
-function uiOverlay(text, kind='hint') {
-  if (!scanOverlay) return;
-  scanOverlay.textContent = text || '';
-  scanOverlay.className = 'scan-overlay ' + kind;
-  scanOverlay.style.display = text ? 'block' : 'none';
-}
-
-function beepAndVibrate() {
-  try { navigator.vibrate?.(80); } catch {}
-  try {
-    // beep muy corto (440Hz) con WebAudio si disponible
-    const ctx = new (window.AudioContext||window.webkitAudioContext)();
-    const o = ctx.createOscillator(); const g = ctx.createGain();
-    o.type='sine'; o.frequency.value=880; g.gain.value=0.02;
-    o.connect(g); g.connect(ctx.destination);
-    o.start(); setTimeout(()=>{ o.stop(); ctx.close(); }, 120);
-  } catch {}
+async function ensureCameras(){
+  try{
+    const devices = await Html5Qrcode.getCameras();
+    cameraSel.innerHTML = '';
+    // Heurística: intentar poner primero la trasera
+    devices.sort((a,b)=>{
+      const ab = /back|rear|environment/i.test(a.label) ? -1 : 0;
+      const bb = /back|rear|environment/i.test(b.label) ? -1 : 0;
+      return ab - bb;
+    });
+    devices.forEach((d,i)=>{
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.label || `Cámara ${i+1}`;
+      cameraSel.appendChild(opt);
+    });
+  }catch(e){
+    console.warn('No cameras', e);
+  }
 }
 
 function setWelcome(user){
@@ -109,32 +112,7 @@ function setLoggedOut(){
   loginCard.hidden = false;
 }
 
-async function ensureCamerasAndSelectBest() {
-  try{
-    const devices = await Html5Qrcode.getCameras();
-    cameraSel.innerHTML = '';
-    if (!devices || !devices.length) {
-      uiOverlay('No se detectó cámara. Revisa permisos.', 'warn');
-      return;
-    }
-    // llenar select
-    devices.forEach((d,i)=>{
-      const opt = document.createElement('option');
-      opt.value = d.id;
-      opt.textContent = d.label || `Cámara ${i+1}`;
-      cameraSel.appendChild(opt);
-    });
-    // intentar seleccionar trasera
-    const rear = devices.find(d => /back|rear|environment/i.test(d.label||''));
-    if (rear) cameraSel.value = rear.id;
-    else cameraSel.value = devices[devices.length-1].id;
-  }catch(e){
-    console.warn('getCameras error', e);
-    uiOverlay('Permite el uso de la cámara en el navegador.', 'warn');
-  }
-}
-
-/************* Autenticación *************/
+// ====== Auth ======
 auth.onAuthStateChanged(async (user)=>{
   if(!user){ setLoggedOut(); return; }
 
@@ -155,14 +133,12 @@ auth.onAuthStateChanged(async (user)=>{
     $('btnLogin')?.removeAttribute('disabled');
   }
 
-  // Acceso OK
   showMsg(loginMsg, '¡Bienvenido! Acceso de gerente concedido.', 'ok');
   setWelcome(user);
   loginCard.hidden = true;
   dash.hidden = false;
 
-  await ensureCamerasAndSelectBest();
-  await startScanner();              // ⬅️ auto-inicio del escáner
+  await ensureCameras();
   loadAudit();
 });
 
@@ -172,6 +148,7 @@ loginForm?.addEventListener('submit', async (ev)=>{
   try{
     await auth.signInWithEmailAndPassword(loginEmail.value.trim(), loginPass.value);
   }catch(e){
+    console.error(e);
     const map = {
       'auth/invalid-email': 'Correo inválido.',
       'auth/user-not-found': 'Usuario no encontrado.',
@@ -186,39 +163,40 @@ btnLogout?.addEventListener('click', async ()=>{
   try{ await auth.signOut(); }catch{}
 });
 
-/************* Escáner *************/
+// ====== Scanner ======
+function calcQrBox(){
+  // Un cuadro amplio mejora la detección
+  const w = Math.max(280, Math.min(qrRegionEl.clientWidth - 24, 420));
+  return { width: w, height: w };
+}
+
 async function startScanner(){
+  if (html5Scanner) return;
+  setScanOverlay('Enfoca el QR', '');
+  const deviceId = cameraSel.value || undefined;
+  html5Scanner = new Html5Qrcode(qrRegionEl.id, { verbose: false });
+
+  const cfg = {
+    fps: 18,
+    qrbox: calcQrBox(),
+    disableFlip: true,
+    formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+  };
+
+  // Prefer environment camera si no hay id
+  const cameraConfig = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" };
+
   try{
-    if (html5Scanner) return;
-
-    // tamaño dinámico
-    const isMobile = window.matchMedia('(max-width: 640px)').matches;
-    const size = isMobile ? 260 : 320;
-    qrRegionEl.style.minHeight = (size+40)+'px';
-
-    const id = cameraSel.value || undefined;
-    html5Scanner = new Html5Qrcode(qrRegionEl.id);
-
-    const cfg = {
-      fps: 12,
-      qrbox: { width: size, height: size },
-      formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
-      experimentalFeatures: { useBarCodeDetectorIfSupported: true }
-    };
-
     await html5Scanner.start(
-      { deviceId: { exact: id }},
+      cameraConfig,
       cfg,
       onScanSuccess,
       onScanError
     );
-
-    uiOverlay('Apunta el QR dentro del recuadro', 'hint');
-    torchSwitch.checked = false;
-    torchOn = false;
   }catch(e){
-    console.error('startScanner', e);
-    uiOverlay('No se pudo iniciar la cámara: ' + (e?.message||e), 'err');
+    console.error('startScanner error', e);
+    setScanOverlay('No se pudo iniciar la cámara', 'err');
   }
 }
 
@@ -228,10 +206,10 @@ async function stopScanner(){
       await html5Scanner.stop();
       await html5Scanner.clear();
       html5Scanner = null;
+      setScanOverlay('Escáner detenido', 'warn');
     }
-    uiOverlay('Cámara detenida', 'warn');
   }catch(e){
-    console.warn('stopScanner', e);
+    console.warn(e);
   }
 }
 
@@ -240,37 +218,56 @@ async function toggleTorch(on){
   if (!html5Scanner) return;
   try{
     await html5Scanner.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
-  }catch(e){ console.warn('torch not supported', e); }
+  }catch(e){ /* algunos navegadores no soportan torch */ }
 }
 
 btnStart?.addEventListener('click', startScanner);
 btnStop?.addEventListener('click', stopScanner);
-btnResume?.addEventListener('click', async ()=>{
-  redeemCard.hidden = true;
-  showMsg(redeemMsg, '', 'info');
-  currentDetect = null;
-  scanningBusy = false;
-  await startScanner();
-  uiOverlay('Apunta el QR dentro del recuadro', 'hint');
-});
 torchSwitch?.addEventListener('change', (e)=> toggleTorch(e.target.checked));
+window.addEventListener('resize', ()=>{
+  // si cambia tamaño, el próximo start usará el nuevo qrbox
+  if (!html5Scanner) setScanOverlay('Enfoca el QR', '');
+});
 
-function onScanError(err){ /* silencioso */ }
-
-async function onScanSuccess(decodedText){
-  if (scanningBusy) return;       // freno anti-doble
-  scanningBusy = true;
-
-  beepAndVibrate();
-  uiOverlay('QR detectado ✓', 'ok');
-  await stopScanner();            // pausa cámara para mostrar datos
-
-  await processInput(decodedText);
-  // Si el cupón ya estaba canjeado, habilitamos reanudar
-  btnResume?.classList.remove('ghost');
+function onScanError(err){
+  // silenciado
 }
 
-/************* Lookup (QR o Código) *************/
+async function onScanSuccess(decodedText){
+  const now = Date.now();
+  // debouncer para evitar dobles lecturas
+  if (now - lastScanTs < 1200) return;
+  lastScanTs = now;
+
+  setScanOverlay('QR detectado ✓', 'ok');
+  await processInput(decodedText);
+}
+
+// ====== Fallback: archivo ======
+btnPickFile?.addEventListener('click', ()=> qrFileInput.click());
+qrFileInput?.addEventListener('change', async (e)=>{
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try{
+    setScanOverlay('Procesando imagen…', 'warn');
+    const result = await Html5Qrcode.scanFileV2(file, true);
+    if (result?.text){
+      setScanOverlay('QR detectado ✓', 'ok');
+      await processInput(result.text);
+    } else {
+      setScanOverlay('No se reconoció un QR en la imagen', 'err');
+      showMsg(redeemMsg, 'No se reconoció un QR en la imagen.', 'err');
+    }
+  }catch(e){
+    console.error(e);
+    setScanOverlay('No se pudo leer la imagen', 'err');
+    showMsg(redeemMsg, 'No se pudo leer la imagen: ' + e.message, 'err');
+  } finally {
+    qrFileInput.value = '';
+  }
+});
+
+// ====== Lookup (QR o Código) ======
 btnLookup?.addEventListener('click', async ()=>{
   const s = codeInput.value.trim().toUpperCase();
   if (!s) { alert('Ingresa un código.'); return; }
@@ -284,13 +281,12 @@ async function processInput(inputText){
 
   const parsed = parseQrText(inputText);
   if (!parsed) {
+    setScanOverlay('QR / código no reconocido', 'err');
     showMsg(redeemMsg, 'QR/código no reconocido.', 'err');
-    scanningBusy = false;
     return;
   }
 
   try{
-    // 1) Determinar uid y code
     let uid=null, code=null;
 
     if (parsed.type === 'json' && parsed.uid && parsed.code) {
@@ -300,27 +296,26 @@ async function processInput(inputText){
       code = parsed.code;
       const snapG = await db.ref('redeems/'+code).once('value');
       if (!snapG.exists()){
+        setScanOverlay('Cupón inexistente', 'err');
         showMsg(redeemMsg, 'No existe este cupón en el sistema.', 'err');
-        scanningBusy = false;
         return;
       }
       uid = String(snapG.val().userId || '');
       if (!uid) {
+        setScanOverlay('Cupón sin usuario', 'err');
         showMsg(redeemMsg, 'El cupón no tiene usuario asociado.', 'err');
-        scanningBusy = false;
         return;
       }
     }
 
-    // 2) Leer ambos nodos
     const [snapGlobal, snapUser] = await Promise.all([
       db.ref('redeems/'+code).once('value'),
       db.ref(`users/${uid}/redemptions/${code}`).once('value')
     ]);
 
     if (!snapGlobal.exists() && !snapUser.exists()) {
+      setScanOverlay('Cupón no encontrado', 'err');
       showMsg(redeemMsg, 'Cupón no encontrado.', 'err');
-      scanningBusy = false;
       return;
     }
 
@@ -334,7 +329,6 @@ async function processInput(inputText){
     const expiresAt  = Number(u.expiresAt || g.expiresAt || 0);
     const stateTxt   = status === 'canjeado' ? 'Canjeado' : 'Pendiente';
 
-    // 3) Pintar info
     rRewardName.textContent = rewardName;
     rCost.textContent       = String(cost);
     rExpires.textContent    = ymd(expiresAt);
@@ -353,23 +347,26 @@ async function processInput(inputText){
       code, uid,
       globalPath: 'redeems/'+code,
       userPath:   `users/${uid}/redemptions/${code}`,
+      snapGlobal, snapUser,
       cost, expiresAt, rewardId: (u.rewardId || g.rewardId || '')
     };
 
+    setScanOverlay(
+      status === 'pendiente' ? 'Cupón listo para canjear' : 'Este cupón ya fue canjeado',
+      status === 'pendiente' ? 'ok' : 'warn'
+    );
     showMsg(redeemMsg, status === 'pendiente'
       ? 'Cupón listo para canjear.'
       : 'Este cupón ya fue canjeado.', status === 'pendiente' ? 'ok':'warn');
 
   }catch(e){
     console.error(e);
+    setScanOverlay('Error al consultar el cupón', 'err');
     showMsg(redeemMsg, 'Error al consultar el cupón: ' + e.message, 'err');
-  } finally {
-    // Permitimos reanudar si se desea seguir escaneando
-    scanningBusy = false;
   }
 }
 
-/************* Canjear *************/
+// ====== Canjear ======
 btnRedeem?.addEventListener('click', async ()=>{
   if (!currentDetect) return;
   const user = auth.currentUser;
@@ -410,22 +407,20 @@ btnRedeem?.addEventListener('click', async ()=>{
   try{
     await db.ref().update(updates);
     showMsg(redeemMsg, '¡Canje exitoso!', 'ok');
+    setScanOverlay('¡Canjeado!', 'ok');
     rStatus.textContent = 'Canjeado';
     rState.textContent  = 'Canjeado';
     btnRedeem.disabled  = true;
-
-    // listo para seguir escaneando el siguiente
-    btnResume?.classList.remove('ghost');
-    uiOverlay('Listo. Pulsa “Reanudar cámara” para el siguiente QR', 'hint');
     loadAudit();
   }catch(e){
     console.error(e);
+    setScanOverlay('No se pudo canjear', 'err');
     showMsg(redeemMsg, 'No se pudo canjear: ' + e.message, 'err');
     btnRedeem.disabled = false;
   }
 });
 
-/************* Auditoría *************/
+// ====== Auditoría ======
 async function loadAudit(){
   try{
     const snap = await db.ref('redeemLogs').limitToLast(25).once('value');
