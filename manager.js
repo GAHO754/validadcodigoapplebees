@@ -1,4 +1,9 @@
-// ====== Helpers UI ======
+// =============================
+// manager.js — Portal Gerentes
+// Requiere: firebase-config.js + html5-qrcode + (auth, database compat)
+// =============================
+
+// ---------- Helpers UI ----------
 const $  = (id) => document.getElementById(id);
 const by = (sel) => document.querySelector(sel);
 
@@ -9,31 +14,31 @@ function showMsg(el, text, kind='info') {
   if (text) el.style.display = 'block';
 }
 
-function ensureOverlay() {
-  // html5-qrcode limpia el contenedor al iniciar; añadimos el overlay si no existe
+function ensureScanOverlay() {
+  const host = $('qrRegion');
+  if (!host) return null;
   let ov = $('scanOverlay');
   if (!ov) {
     ov = document.createElement('div');
     ov.id = 'scanOverlay';
     ov.className = 'scan-overlay';
     ov.dataset.text = '';
-    qrRegionEl?.appendChild(ov);
+    host.appendChild(ov);
   }
   return ov;
 }
-
 function setScanOverlay(text, kind='') {
-  const ov = ensureOverlay();
+  const ov = ensureScanOverlay();
   if (!ov) return;
   ov.dataset.text = text || '';
   ov.className = 'scan-overlay ' + (kind || '');
 }
 
-// ====== Firebase ======
+// ---------- Firebase ----------
 const auth = firebase.auth();
 const db   = firebase.database();
 
-// ====== DOM refs ======
+// ---------- DOM refs ----------
 const loginCard   = $('loginCard');
 const loginForm   = $('loginForm');
 const loginEmail  = $('loginEmail');
@@ -50,10 +55,6 @@ const cameraSel   = $('cameraSelect');
 const btnStart    = $('btnStartScan');
 const btnStop     = $('btnStopScan');
 const torchSwitch = $('switchTorch');
-
-// (opcionales, por si luego los agregas en el HTML)
-const btnPickFile = $('btnPickFile');
-const qrFileInput = $('qrFile');
 
 const codeInput   = $('codeInput');
 const btnLookup   = $('btnLookup');
@@ -75,23 +76,23 @@ const redeemMsg   = $('redeemMsg');
 const auditTableBody = by('#auditTable tbody');
 const btnReloadAudit = $('btnReloadAudit');
 
-// ====== Estado ======
+// ---------- Estado ----------
 let html5Scanner = null;
 let currentDetect = null;
 let torchOn = false;
 
-// ====== Utils ======
+// ---------- Utilidades ----------
 const fmt = (ms) => ms ? new Date(ms).toLocaleString('es-MX',{dateStyle:'medium', timeStyle:'short'}) : '—';
 const ymd = (ms) => ms ? new Date(ms).toLocaleDateString('es-MX',{year:'numeric',month:'2-digit',day:'2-digit'}) : '—';
 
 function parseQrText(text){
-  // 1) payload JSON generado por tu app (trae uid+code)
+  // 1) JSON con {uid, code, ...}
   try {
     const obj = JSON.parse(text);
     if (obj && obj.code) return { type:'json', ...obj };
   } catch(e){}
-  // 2) código simple alfanumérico
-  const s = String(text||'').trim();
+  // 2) Solo código alfanumérico (8-14)
+  const s = String(text||'').trim().toUpperCase();
   if (/^[A-Z0-9]{8,14}$/.test(s)) return { type:'code', code:s };
   return null;
 }
@@ -100,11 +101,11 @@ async function ensureCameras(){
   try{
     const devices = await Html5Qrcode.getCameras();
     cameraSel.innerHTML = '';
-    // preferir trasera
+    // Preferir trasera
     devices.sort((a,b)=>{
-      const ab = /back|rear|environment/i.test(a.label) ? -1 : 0;
-      const bb = /back|rear|environment/i.test(b.label) ? -1 : 0;
-      return ab - bb;
+      const aBack = /back|rear|environment/i.test(a.label) ? -1 : 0;
+      const bBack = /back|rear|environment/i.test(b.label) ? -1 : 0;
+      return aBack - bBack;
     });
     devices.forEach((d,i)=>{
       const opt = document.createElement('option');
@@ -113,7 +114,7 @@ async function ensureCameras(){
       cameraSel.appendChild(opt);
     });
   }catch(e){
-    console.warn('No cameras', e);
+    console.warn('[QR] No cameras', e);
   }
 }
 
@@ -121,14 +122,13 @@ function setWelcome(user){
   sessionActions.hidden = false;
   mgrEmailSpan.textContent = user.email || user.uid;
 }
-
 function setLoggedOut(){
   sessionActions.hidden = true;
   dash.hidden = true;
   loginCard.hidden = false;
 }
 
-// ====== Auth ======
+// ---------- Auth ----------
 auth.onAuthStateChanged(async (user)=>{
   if(!user){ setLoggedOut(); return; }
 
@@ -136,6 +136,7 @@ auth.onAuthStateChanged(async (user)=>{
   $('btnLogin')?.setAttribute('disabled', 'disabled');
 
   try{
+    // Autorización de gerente
     const snap = await db.ref('managers/'+user.uid).once('value');
     if (!snap.exists()) {
       showMsg(loginMsg, 'Tu usuario no está autorizado como gerente.', 'err');
@@ -154,8 +155,8 @@ auth.onAuthStateChanged(async (user)=>{
   loginCard.hidden = true;
   dash.hidden = false;
 
-  ensureOverlay();         // prepara overlay visual
-  await ensureCameras();   // llena el selector
+  await ensureCameras();
+  ensureScanOverlay();
   loadAudit();
 });
 
@@ -180,8 +181,9 @@ btnLogout?.addEventListener('click', async ()=>{
   try{ await auth.signOut(); }catch{}
 });
 
-// ====== Scanner ======
+// ---------- Escáner ----------
 function calcQrBox(){
+  // Caja amplia mejora la detección en tablets/teléfonos
   const w = Math.max(280, Math.min(qrRegionEl.clientWidth - 24, 420));
   return { width: w, height: w };
 }
@@ -189,9 +191,9 @@ function calcQrBox(){
 async function startScanner(){
   if (html5Scanner) return;
   setScanOverlay('Enfoca el QR', '');
-  console.log('[QR] startScanner()');
+  console.log('[QR] start');
 
-  const deviceId = cameraSel?.value || undefined;
+  const deviceId = cameraSel.value || undefined;
   html5Scanner = new Html5Qrcode(qrRegionEl.id, { verbose: true });
 
   const cfg = {
@@ -200,17 +202,17 @@ async function startScanner(){
     disableFlip: true,
     formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
     experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+    aspectRatio: 1.0
   };
   const cameraConfig = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" };
 
   try{
     await html5Scanner.start(cameraConfig, cfg, onScanSuccess, onScanError);
-    console.log('[QR] Cámara iniciada OK', cameraConfig, cfg);
-    ensureOverlay(); // vuelve a añadir el overlay si el contenedor fue reseteado
+    console.log('[QR] Cámara iniciada OK');
   }catch(e){
     console.error('[QR] No se pudo iniciar la cámara', e);
     setScanOverlay('No se pudo iniciar la cámara', 'err');
-    showMsg(redeemMsg, 'Permite la cámara o usa “Subir imagen del QR”.', 'err');
+    showMsg(redeemMsg, 'Permite el uso de la cámara o verifica que el sitio sea HTTPS.', 'err');
   }
 }
 
@@ -220,10 +222,10 @@ async function stopScanner(){
       await html5Scanner.stop();
       await html5Scanner.clear();
       html5Scanner = null;
-      setScanOverlay('Escáner detenido', 'warn');
+      setScanOverlay('Escaneo detenido', 'warn');
     }
   }catch(e){
-    console.warn('stopScanner', e);
+    console.warn('[QR] stop error', e);
   }
 }
 
@@ -232,55 +234,26 @@ async function toggleTorch(on){
   if (!html5Scanner) return;
   try{
     await html5Scanner.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
-  }catch(e){
-    console.warn('torch not supported', e);
-    torchSwitch && (torchSwitch.checked = false);
-  }
+  }catch(e){ console.warn('[QR] torch not supported', e); }
 }
+
+btnStart?.addEventListener('click', startScanner);
+btnStop?.addEventListener('click', stopScanner);
+torchSwitch?.addEventListener('change', (e)=> toggleTorch(e.target.checked));
 
 function onScanError(err){
-  // ruido normal; déjalo en blanco o loguea si necesitas
-  // console.debug('[QR] onScanError:', err);
+  // Mucho ruido; se deja silencioso
+  // console.debug('[QR] onScanError', err);
 }
-
 async function onScanSuccess(decodedText){
   console.log('[QR] SCAN OK:', decodedText);
   setScanOverlay('QR detectado ✓', 'ok');
   await processInput(decodedText);
 }
 
-// Conectar botones (¡esto faltaba!)
-btnStart?.addEventListener('click', startScanner);
-btnStop?.addEventListener('click', stopScanner);
-torchSwitch?.addEventListener('change', (e)=> toggleTorch(e.target.checked));
-
-// ====== Fallback: archivo (si agregas los elementos en HTML) ======
-btnPickFile?.addEventListener('click', ()=> qrFileInput?.click());
-qrFileInput?.addEventListener('change', async (e)=>{
-  const file = e.target.files?.[0];
-  if (!file) return;
-  try{
-    setScanOverlay('Procesando imagen…', 'warn');
-    const result = await Html5Qrcode.scanFileV2(file, true);
-    if (result?.text){
-      setScanOverlay('QR detectado ✓', 'ok');
-      await processInput(result.text);
-    } else {
-      setScanOverlay('No se reconoció un QR en la imagen', 'err');
-      showMsg(redeemMsg, 'No se reconoció un QR en la imagen.', 'err');
-    }
-  }catch(e){
-    console.error(e);
-    setScanOverlay('No se pudo leer la imagen', 'err');
-    showMsg(redeemMsg, 'No se pudo leer la imagen: ' + e.message, 'err');
-  } finally {
-    if (qrFileInput) qrFileInput.value = '';
-  }
-});
-
-// ====== Lookup (QR o Código) ======
+// ---------- Lookup (QR o Código) ----------
 btnLookup?.addEventListener('click', async ()=>{
-  const s = (codeInput?.value || '').trim().toUpperCase();
+  const s = codeInput.value.trim().toUpperCase();
   if (!s) { alert('Ingresa un código.'); return; }
   await processInput(s);
 });
@@ -340,6 +313,7 @@ async function processInput(inputText){
     const expiresAt  = Number(u.expiresAt || g.expiresAt || 0);
     const stateTxt   = status === 'canjeado' ? 'Canjeado' : 'Pendiente';
 
+    // Pintar
     rRewardName.textContent = rewardName;
     rCost.textContent       = String(cost);
     rExpires.textContent    = ymd(expiresAt);
@@ -354,6 +328,7 @@ async function processInput(inputText){
     redeemCard.hidden = false;
     btnRedeem.disabled = (status !== 'pendiente');
 
+    // Contexto para canjear
     currentDetect = {
       code, uid,
       globalPath: 'redeems/'+code,
@@ -377,7 +352,7 @@ async function processInput(inputText){
   }
 }
 
-// ====== Canjear ======
+// ---------- Canjear ----------
 btnRedeem?.addEventListener('click', async ()=>{
   if (!currentDetect) return;
   const user = auth.currentUser;
@@ -431,7 +406,7 @@ btnRedeem?.addEventListener('click', async ()=>{
   }
 });
 
-// ====== Auditoría ======
+// ---------- Auditoría ----------
 async function loadAudit(){
   try{
     const snap = await db.ref('redeemLogs').limitToLast(25).once('value');
@@ -456,5 +431,4 @@ async function loadAudit(){
     auditTableBody.innerHTML = `<tr><td colspan="8" class="err">Error cargando auditoría.</td></tr>`;
   }
 }
-
 btnReloadAudit?.addEventListener('click', loadAudit);
