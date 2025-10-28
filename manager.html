@@ -13,10 +13,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <!-- Tu archivo con firebase.initializeApp(firebaseConfig) -->
   <script src="firebase-config.js"></script>
 
-  <!-- QR decode (html5-qrcode) -->
+  <!-- QR decode -->
   <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body class="bg">
@@ -24,7 +23,6 @@
 
   <header class="topbar">
     <div class="brand">
-      <!-- usa tu logo disponible: manzanas.png, logo_anim_transparent.gif, etc. -->
       <img src="manzanas.png" alt="logo" class="logo">
       <h1>Gerentes — Canje</h1>
     </div>
@@ -60,29 +58,31 @@
         <article class="card">
           <div class="card-header">
             <h3>Escanear código QR</h3>
-            <div class="toggle">
+            <div class="row">
               <label class="switch" title="Encender linterna">
                 <input id="switchTorch" type="checkbox">
                 <span class="slider"></span>
               </label>
-              <small>Linterna</small>
+              <small class="muted">Linterna</small>
             </div>
           </div>
 
-          <div id="qrRegion" class="qr-region" aria-label="Área de escaneo"></div>
-
-          <!-- ⬇️ Overlay de estado para el escáner -->
-          <div id="scanOverlay" class="scan-overlay" aria-live="polite">
-            Apunta el QR dentro del recuadro
+          <div id="qrRegion" class="qr-region" aria-label="Área de escaneo">
+            <div id="scanOverlay" class="scan-overlay" data-text="Enfoca el QR"></div>
           </div>
 
           <div class="row mt8">
             <select id="cameraSelect" class="select" aria-label="Seleccionar cámara"></select>
             <button id="btnStartScan" class="btn" type="button">Iniciar</button>
             <button id="btnStopScan" class="btn ghost" type="button">Detener</button>
-            <!-- ⬇️ Botón para reanudar cámara tras leer/canjear -->
-            <button id="btnResumeScan" class="btn ghost" type="button">Reanudar cámara</button>
           </div>
+
+          <div class="row mt8">
+            <input id="qrFile" type="file" accept="image/*" hidden>
+            <button id="btnPickFile" class="btn" type="button">Subir imagen del QR</button>
+            <small class="muted">Si la cámara no detecta, puedes subir una foto del cupón.</small>
+          </div>
+
           <small class="muted">También puedes teclear el código abajo.</small>
         </article>
 
@@ -171,7 +171,6 @@
     <small>© 2025 Great American Hospitality</small>
   </footer>
 
-  <!-- Lógica del portal de gerentes -->
   <script src="manager.js"></script>
 </body>
 </html>
