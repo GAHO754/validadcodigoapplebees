@@ -1,8 +1,3 @@
-// =============================
-// manager.js — Portal Gerentes
-// Requiere: firebase-config.js + html5-qrcode + (auth, database compat)
-// =============================
-
 // ---------- Helpers UI ----------
 const $  = (id) => document.getElementById(id);
 const by = (sel) => document.querySelector(sel);
@@ -432,3 +427,4 @@ async function loadAudit(){
   }
 }
 btnReloadAudit?.addEventListener('click', loadAudit);
+
