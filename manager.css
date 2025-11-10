@@ -146,4 +146,5 @@ input:checked + .slider:before{ transform:translateX(20px); }
 .modal.ok{   border-color:#1e5734; background:#0e1a14; }
 
 /* Fuerza que el overlay se oculte al tener [hidden] */
-.overlay[hidden] { display: none !important; }
+.overlay[hidden]{ display:none !important; }
+
