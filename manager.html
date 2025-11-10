@@ -9,19 +9,20 @@
   <link rel="icon" type="image/png" sizes="32x32" href="manzanas.png">
   <link rel="stylesheet" href="manager.css" />
 
-  <!-- Firebase (Compat) -->
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <!-- Configuración de tu proyecto -->
   <script src="firebase-config.js"></script>
 
   <!-- Lector QR -->
   <script src="https://unpkg.com/html5-qrcode"></script>
-</head>
-<body class="bg">
-  <noscript>Este portal requiere JavaScript.</noscript>
 
+  <!-- Generador QR pequeño -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+
+<body class="bg">
   <header class="topbar">
     <div class="brand">
       <img src="manzanas.png" alt="logo" class="logo">
@@ -29,16 +30,16 @@
     </div>
     <div class="actions" id="sessionActions" hidden>
       <span id="mgrEmail" class="muted"></span>
-      <button id="btnLogout" class="btn ghost" type="button">Salir</button>
+      <button id="btnLogout" class="btn ghost">Salir</button>
     </div>
   </header>
 
   <main class="container">
+
     <!-- LOGIN -->
     <section id="loginCard" class="card auth">
       <h2>Acceso de gerentes</h2>
-      <p class="muted">Ingresa con tu correo corporativo.</p>
-      <form id="loginForm" class="grid" autocomplete="on">
+      <form id="loginForm" class="grid">
         <label class="field">
           <span>Correo</span>
           <input id="loginEmail" type="email" placeholder="gerente@empresa.com" required>
@@ -47,192 +48,68 @@
           <span>Contraseña</span>
           <input id="loginPass" type="password" placeholder="••••••••" required>
         </label>
-        <button id="btnLogin" type="submit" class="btn primary">Entrar</button>
+        <button id="btnLogin" class="btn primary">Entrar</button>
       </form>
       <p id="loginMsg" class="msg"></p>
     </section>
 
     <!-- DASHBOARD -->
-    <section id="dashboard" class="dash" hidden>
+    <section id="dashboard" hidden>
       <div class="grid2">
+
         <!-- ESCÁNER -->
         <article class="card">
-          <div class="card-header">
-            <h3>Escanear código QR</h3>
-            <div class="toggle">
-              <label class="switch">
-                <input id="switchTorch" type="checkbox">
-                <span class="slider"></span>
-              </label>
-              <small>Linterna</small>
-            </div>
+          <h3>Escanear código QR</h3>
+          <div id="qrRegion" class="qr-region"></div>
+          <div class="row">
+            <select id="cameraSelect" class="select"></select>
+            <button id="btnStartScan" class="btn">Iniciar</button>
+            <button id="btnStopScan" class="btn ghost">Detener</button>
           </div>
-
-          <div id="qrRegion" class="qr-region" aria-label="Área de escaneo"></div>
-
-          <div class="row mt8">
-            <select id="cameraSelect" class="select" aria-label="Seleccionar cámara"></select>
-            <button id="btnStartScan" class="btn" type="button">Iniciar</button>
-            <button id="btnStopScan" class="btn ghost" type="button">Detener</button>
-          </div>
-          <small class="muted">También puedes ingresar el código manualmente.</small>
         </article>
 
-        <!-- VALIDAR CÓDIGO -->
+        <!-- VALIDAR MANUAL -->
         <article class="card">
           <h3>Buscar/validar por código</h3>
           <div class="row">
             <input id="codeInput" type="text" class="mono" placeholder="Ej. AB3K9T6P2C">
-            <button id="btnLookup" class="btn" type="button">Buscar</button>
+            <button id="btnLookup" class="btn">Buscar</button>
           </div>
 
           <hr class="sep">
 
+          <!-- DETALLE DEL CUPÓN -->
           <div id="redeemCard" class="redeem" hidden>
-            <div class="redeem-head">
-              <div>
-                <h4 id="rRewardName">—</h4>
-                <div class="tags">
-                  <span class="tag">Costo: <b id="rCost">0</b> pts</span>
-                  <span class="tag">Vence: <b id="rExpires">—</b></span>
-                </div>
-              </div>
-              <div class="status" id="rStatus">—</div>
-            </div>
+            <h4 id="rRewardName">—</h4>
+            <p><b>Código:</b> <span id="rCode">—</span></p>
+            <p><b>Cliente:</b> <span id="rUser">—</span></p>
+            <p><b>Recompensa:</b> <span id="rRewardId">—</span></p>
+            <p><b>Estado:</b> <span id="rStatus">—</span></p>
 
-            <div class="grid2 mt8">
-              <div class="info">
-                <p class="label">Código</p>
-                <p class="mono" id="rCode">—</p>
-
-                <p class="label">Cliente (UID)</p>
-                <p class="mono" id="rUser">—</p>
-
-                <p class="label">Recompensa</p>
-                <p class="mono" id="rRewardId">—</p>
-              </div>
-              <div class="info">
-                <p class="label">Creado</p>
-                <p id="rCreated">—</p>
-
-                <p class="label">Estado</p>
-                <p id="rState">—</p>
-              </div>
+            <!-- QR CHICO -->
+            <div class="mini-qr-wrap" style="margin-top:10px;display:flex;align-items:center;gap:12px;">
+              <div id="miniQR" style="width:100px;height:100px;background:#fff;border-radius:8px;padding:4px;box-shadow:0 2px 10px rgba(0,0,0,.25);"></div>
+              <small class="muted">Vista previa del QR</small>
             </div>
 
             <div class="row mt12">
               <label class="field grow">
-                <span>Notas (opcional)</span>
-                <input id="rNote" type="text" placeholder="Ej. Entregado por Gerente No.2">
+                <span>Notas</span>
+                <input id="rNote" type="text" placeholder="Ej. Entregado por Gerente 2">
               </label>
-              <button id="btnRedeem" class="btn primary" type="button">Canjear ahora</button>
+              <button id="btnRedeem" class="btn primary">Canjear</button>
             </div>
 
             <p id="redeemMsg" class="msg"></p>
           </div>
         </article>
       </div>
-
-      <!-- AUDITORÍA -->
-      <article class="card mt16">
-        <div class="card-header">
-          <h3>Últimos canjes</h3>
-          <button id="btnReloadAudit" class="btn ghost" type="button">Actualizar</button>
-        </div>
-
-        <!-- Métricas tipo tarjetas -->
-        <div class="kpi-deck">
-          <div class="kpi">
-            <div class="k">Total</div>
-            <div class="v" id="mTotal">0</div>
-          </div>
-          <div class="kpi">
-            <div class="k">Hoy</div>
-            <div class="v" id="mToday">0</div>
-          </div>
-          <div class="kpi">
-            <div class="k">Últimos 7 días</div>
-            <div class="v" id="mWeek">0</div>
-          </div>
-          <div class="kpi">
-            <div class="k">Gerentes</div>
-            <div class="v" id="mManagers">0</div>
-          </div>
-          <!-- NUEVOS KPIs EN TIEMPO REAL -->
-          <div class="kpi">
-            <div class="k">Válidos hoy</div>
-            <div class="v" id="mValidToday">0</div>
-          </div>
-          <div class="kpi">
-            <div class="k">Fallidos hoy</div>
-            <div class="v" id="mFailedToday">0</div>
-          </div>
-        </div>
-
-        <!-- Filtros -->
-        <div class="toolbar">
-          <div class="toolbar__group">
-            <label class="field sm">
-              <span>Desde</span>
-              <input id="fFrom" type="date">
-            </label>
-            <label class="field sm">
-              <span>Hasta</span>
-              <input id="fTo" type="date">
-            </label>
-            <label class="field sm">
-              <span>Estado</span>
-              <select id="fStatus">
-                <option value="">Todos</option>
-                <option value="canjeado">Canjeado</option>
-              </select>
-            </label>
-            <label class="field sm">
-              <span>Gerente (correo)</span>
-              <input id="fManager" type="text" placeholder="ej. gerente@empresa.com">
-            </label>
-          </div>
-          <div class="toolbar__actions">
-            <button id="fApply" class="btn" type="button">Buscar</button>
-          </div>
-        </div>
-
-        <div class="table-wrap">
-          <table class="table" id="auditTable">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Código</th>
-                <th>Reward</th>
-                <th>Pts</th>
-                <th>Cliente</th>
-                <th>Gerente</th>
-                <th>Estado</th>
-                <th>Nota</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </article>
     </section>
   </main>
 
   <footer class="foot">
     <small>© 2025 Great American Hospitality</small>
   </footer>
-
-  <!-- Modal de alerta -->
-  <div id="alertOverlay" class="overlay" hidden>
-    <div class="modal">
-      <h3 id="alertTitle">Aviso</h3>
-      <p id="alertText" class="muted"></p>
-      <div class="row right">
-        <button id="alertClose" class="btn ghost" type="button">Cerrar</button>
-        <button id="alertResume" class="btn" type="button">Reanudar escaneo</button>
-      </div>
-    </div>
-  </div>
 
   <script src="manager.js"></script>
 </body>
