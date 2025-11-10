@@ -1,5 +1,5 @@
 /* ===============================
-   Portal Gerentes — Canje (versión unificada)
+   Portal Gerentes — Canje (completo)
    =============================== */
 
 firebase.initializeApp(firebaseConfig);
@@ -11,8 +11,8 @@ const loginCard = document.getElementById("loginCard");
 const dashboard = document.getElementById("dashboard");
 const loginForm = document.getElementById("loginForm");
 const loginMsg  = document.getElementById("loginMsg");
-const mgrEmail  = document.getElementById("mgrEmail");
 const btnLogout = document.getElementById("btnLogout");
+const mgrEmail  = document.getElementById("mgrEmail");
 const sessionActions = document.getElementById("sessionActions");
 
 /* Escáner y manual */
@@ -38,12 +38,14 @@ const rNote    = document.getElementById("rNote");
 const btnRedeem= document.getElementById("btnRedeem");
 const redeemMsg= document.getElementById("redeemMsg");
 
-/* Auditoría */
+/* Auditoría + KPIs */
 const auditTableBody = document.getElementById("auditTable").querySelector("tbody");
 const mTotal    = document.getElementById("mTotal");
 const mToday    = document.getElementById("mToday");
 const mWeek     = document.getElementById("mWeek");
 const mManagers = document.getElementById("mManagers");
+const mValidToday  = document.getElementById("mValidToday");
+const mFailedToday = document.getElementById("mFailedToday");
 const btnReloadAudit = document.getElementById("btnReloadAudit");
 const fFrom   = document.getElementById("fFrom");
 const fTo     = document.getElementById("fTo");
@@ -72,7 +74,6 @@ function toast(msg, kind="ok"){
   setTimeout(()=>div.style.opacity=1,10);
   setTimeout(()=>{div.style.opacity=0;setTimeout(()=>div.remove(),300)},2400);
 }
-
 function vibrate(ms=120){ try{ navigator.vibrate?.(ms); }catch{} }
 function tone(kind="warn"){
   try{
@@ -87,7 +88,7 @@ function tone(kind="warn"){
   }catch{}
 }
 
-/* ---------- Modal robusto ---------- */
+/* ---------- Modal ---------- */
 function showAlert({title="Aviso", text="", toneType="warn", canResume=true} = {}){
   alertTitle.textContent = title;
   alertText.textContent  = text;
@@ -108,9 +109,6 @@ alertResume?.addEventListener("click",()=>hideAlert(true));
 alertOverlay?.addEventListener("click",(e)=>{ if(e.target===alertOverlay)hideAlert(false); });
 document.addEventListener("keydown",(e)=>{ if(!alertOverlay.hidden && e.key==="Escape")hideAlert(false); });
 
-window.__hideAlert = hideAlert;
-window.showAlert = showAlert;
-
 /* ---------- Sesión ---------- */
 auth.onAuthStateChanged(async (user)=>{
   if (user) {
@@ -120,6 +118,7 @@ auth.onAuthStateChanged(async (user)=>{
     mgrEmail.textContent = user.email || user.uid;
     await loadCameras();
     await loadAudit();
+    watchRealtimeKpisToday();   // KPIs en vivo
   } else {
     loginCard.hidden = false;
     dashboard.hidden = true;
@@ -171,6 +170,27 @@ async function stopScan(){
   btnStart.disabled = false; btnStop.disabled = true;
 }
 
+/* Registrar intentos (ok/fail) para KPIs de fallidos/validos */
+function logAttempt({ code, userId=null, outcome="fail", reason="", extra=null }){
+  try{
+    const u = auth.currentUser;
+    if (!u) return;
+    const now = Date.now();
+    const key = db.ref("redeemAttempts").push().key;
+    const payload = {
+      code: code || null,
+      userId: userId || null,
+      managerUid: u.uid,
+      managerEmail: u.email || null,
+      outcome,                 // "ok" | "fail"
+      reason: reason || null,  // not_found | expired | already_redeemed | payload_expired | redeemed
+      ts: now,
+      extra: extra || null
+    };
+    db.ref("redeemAttempts/" + key).set(payload).catch(()=>{});
+  }catch(_){}
+}
+
 /* Lee QR en JSON o código plano y busca en /redeems */
 function onScanSuccess(decodedText){
   stopScan(); // evita dobles lecturas
@@ -183,14 +203,9 @@ function onScanSuccess(decodedText){
     if (obj && obj.code) {
       code = String(obj.code).trim().toUpperCase();
 
-      // Validación extra del payload (opcional)
       if (obj.exp && Date.now() > Number(obj.exp)) {
-        showAlert({
-          title: "Cupón vencido",
-          text: "El QR está expirado.",
-          toneType: "err",
-          canResume: true
-        });
+        logAttempt({ code: obj.code, userId: obj.uid || null, outcome:"fail", reason:"payload_expired" });
+        showAlert({ title:"Cupón vencido", text:"El QR está expirado.", toneType:"err", canResume:true });
         return;
       }
     }
@@ -228,6 +243,7 @@ async function lookupCode(code){
   try {
     const snap = await db.ref("redeems/" + code).get(); // ruta correcta
     if (!snap.exists()) {
+      logAttempt({ code, outcome:"fail", reason:"not_found" });
       showAlert({ title:"No encontrado", text:"Código no registrado.", toneType:"err", canResume:true });
       return;
     }
@@ -237,6 +253,7 @@ async function lookupCode(code){
 
     const st = String(d.status||"").toLowerCase();
     if (st !== "pending" && st !== "pendiente") {
+      logAttempt({ code, userId: d.userId || null, outcome:"fail", reason:"already_redeemed" });
       showAlert({ title:"Cupón ya canjeado", text:"Este QR/código ya fue canjeado anteriormente.", toneType:"warn", canResume:true });
     }
 
@@ -269,7 +286,7 @@ function fillRedeemCard(d){
   btnRedeem.disabled = !canRedeem;
 }
 
-/* ---------- Canjear (actualiza /redeems + espejo de usuario + bitácora) ---------- */
+/* ---------- Canjear (actualiza /redeems + espejo + bitácora) ---------- */
 btnRedeem?.addEventListener("click", doRedeem);
 
 async function doRedeem(){
@@ -287,12 +304,14 @@ async function doRedeem(){
   const d = snap.val();
 
   if (d.expiresAt && Date.now() > Number(d.expiresAt)){
+    logAttempt({ code: dataCode, userId: d.userId || null, outcome:"fail", reason:"expired" });
     showAlert({title:"Cupón vencido", text:"La cortesía ya expiró.", toneType:"err", canResume:true});
     redeemMsg.textContent = "Cupón vencido."; return;
   }
 
   const st = String(d.status||"").toLowerCase();
   if (st !== "pending" && st !== "pendiente"){
+    logAttempt({ code: dataCode, userId: d.userId || null, outcome:"fail", reason:"already_redeemed" });
     showAlert({title:"Cupón ya canjeado", text:"Este código ya fue canjeado.", toneType:"warn", canResume:true});
     redeemMsg.textContent = "El cupón ya fue canjeado."; return;
   }
@@ -333,6 +352,7 @@ async function doRedeem(){
   btnRedeem.disabled = true;
   try {
     await db.ref().update(updates);
+    logAttempt({ code: dataCode, userId: d.userId || null, outcome:"ok", reason:"redeemed" });
     toast("¡Canje realizado!", "ok");
     redeemMsg.textContent = "Canje exitoso.";
 
@@ -376,9 +396,9 @@ async function loadAudit(){
     });
 
     const now = Date.now();
-    const startOfDay = new Date().setHours(0,0,0,0);
+    const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
     const weekAgo = now - 7*24*60*60*1000;
-    const todayCount = items.filter(x=> (x.ts||0) >= startOfDay).length;
+    const todayCount = items.filter(x=> (x.ts||0) >= startOfDay.getTime()).length;
     const weekCount  = items.filter(x=> (x.ts||0) >= weekAgo).length;
     const managers = new Set(items.map(x=> x.redeemedByEmail||x.redeemedBy).filter(Boolean));
 
@@ -408,6 +428,36 @@ async function loadAudit(){
 
 function escapeHtml(s){
   return String(s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
+}
+
+/* ---------- KPIs en tiempo real: válidos / fallidos hoy ---------- */
+function watchRealtimeKpisToday(){
+  const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+  const from = startOfDay.getTime();
+
+  // Válidos hoy (redeemLogs con status: canjeado)
+  db.ref("redeemLogs")
+    .orderByChild("ts").startAt(from)
+    .on("value", (snap)=>{
+      const val = snap.val() || {};
+      let validToday = 0;
+      Object.values(val).forEach(x=>{
+        if (String(x.status||"").toLowerCase() === "canjeado") validToday++;
+      });
+      if (mValidToday) mValidToday.textContent = String(validToday);
+    });
+
+  // Fallidos hoy (redeemAttempts con outcome: fail)
+  db.ref("redeemAttempts")
+    .orderByChild("ts").startAt(from)
+    .on("value", (snap)=>{
+      const val = snap.val() || {};
+      let failedToday = 0;
+      Object.values(val).forEach(x=>{
+        if (String(x.outcome||"") === "fail") failedToday++;
+      });
+      if (mFailedToday) mFailedToday.textContent = String(failedToday);
+    });
 }
 
 /* ---------- Exporta funciones globales ---------- */
