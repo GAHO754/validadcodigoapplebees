@@ -60,6 +60,9 @@ const alertText    = document.getElementById("alertText");
 const alertClose   = document.getElementById("alertClose");
 const alertResume  = document.getElementById("alertResume");
 
+/* Mini QR (preview) */
+const miniQR = document.getElementById("miniQR");
+
 /* ---------- Utilidades ---------- */
 function toast(msg, kind="ok"){
   const div = document.createElement("div");
@@ -245,6 +248,9 @@ async function lookupCode(code){
     if (!snap.exists()) {
       logAttempt({ code, outcome:"fail", reason:"not_found" });
       showAlert({ title:"No encontrado", text:"Código no registrado.", toneType:"err", canResume:true });
+      // limpia QR si hubiera
+      if (miniQR) miniQR.innerHTML = "";
+      redeemCard.hidden = true;
       return;
     }
 
@@ -268,6 +274,27 @@ function fmtDate(ms){
   return new Date(ms).toLocaleString("es-MX",{dateStyle:"short",timeStyle:"short"});
 }
 
+/* ===== mini-QR: genera/limpia preview ===== */
+function renderMiniQR(d){
+  if (!miniQR) return;
+  miniQR.innerHTML = "";
+  try{
+    // Payload compatible con el generado para el cliente
+    const payload = JSON.stringify({
+      v: 1,
+      brand: "Applebee's",
+      uid: d.userId || null,
+      code: d.code || "",
+      rewardId: d.rewardId || null,
+      cost: Number(d.cost || 0),
+      exp: Number(d.expiresAt || 0)
+    });
+    if (window.QRCode) {
+      new QRCode(miniQR, { text: payload, width: 100, height: 100 });
+    }
+  }catch(e){ /* silencioso */ }
+}
+
 function fillRedeemCard(d){
   redeemCard.hidden = false;
   rRewardName.textContent = d.rewardName || d.rewardId || "Cortesía";
@@ -284,6 +311,10 @@ function fillRedeemCard(d){
 
   const canRedeem = ["pending","pendiente"].includes(String(d.status||"").toLowerCase());
   btnRedeem.disabled = !canRedeem;
+
+  // ✅ Muestra QR chico SOLO si está pendiente; si no, lo limpia
+  if (canRedeem) renderMiniQR(d);
+  else if (miniQR) miniQR.innerHTML = "";
 }
 
 /* ---------- Canjear (actualiza /redeems + espejo + bitácora) ---------- */
