@@ -219,16 +219,18 @@
   </footer>
 
   <!-- Modal de alerta -->
-  <div id="alertOverlay" class="overlay" hidden>
-    <div class="modal">
-      <h3 id="alertTitle">Aviso</h3>
-      <p id="alertText" class="muted"></p>
-      <div class="row right">
-        <button id="alertClose" class="btn ghost" type="button">Cerrar</button>
-        <button id="alertResume" class="btn" type="button">Reanudar escaneo</button>
-      </div>
+<div id="alertOverlay" class="overlay" role="dialog" aria-modal="true" hidden>
+  <div class="modal" id="alertModal" tabindex="-1">
+    <h3 id="alertTitle">Aviso</h3>
+    <p id="alertText" class="muted"></p>
+    <div class="row right">
+      <!-- Fallback inline por si algún listener externo falla -->
+      <button id="alertClose" class="btn ghost" type="button" onclick="window.__hideAlert && window.__hideAlert(false)">Cerrar</button>
+      <button id="alertResume" class="btn" type="button" onclick="window.__hideAlert && window.__hideAlert(true)">Reanudar escaneo</button>
     </div>
   </div>
+</div>
+
 
   <!-- Lógica -->
   <script src="manager.js"></script>
