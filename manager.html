@@ -7,14 +7,13 @@
   <title>Portal de Gerentes — Canje</title>
 
   <link rel="icon" type="image/png" sizes="32x32" href="manzanas.png">
-  <!-- Rompemos caché con ?v=4 por si ya tenías la hoja cargada -->
-  <link rel="stylesheet" href="manager.css?v=4" />
+  <link rel="stylesheet" href="manager.css" />
 
   <!-- Firebase (Compat) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <!-- Tu configuración -->
+  <!-- Configuración de tu proyecto -->
   <script src="firebase-config.js"></script>
 
   <!-- Lector QR -->
@@ -23,10 +22,9 @@
 <body class="bg">
   <noscript>Este portal requiere JavaScript.</noscript>
 
-  <!-- Topbar -->
   <header class="topbar">
     <div class="brand">
-      <img src="manzanas.png" alt="Logo" class="logo">
+      <img src="manzanas.png" alt="logo" class="logo">
       <h1>Gerentes — Canje</h1>
     </div>
     <div class="actions" id="sessionActions" hidden>
@@ -57,12 +55,12 @@
     <!-- DASHBOARD -->
     <section id="dashboard" class="dash" hidden>
       <div class="grid2">
-        <!-- ESCÁNER QR -->
+        <!-- ESCÁNER -->
         <article class="card">
           <div class="card-header">
             <h3>Escanear código QR</h3>
             <div class="toggle">
-              <label class="switch" title="Activar linterna (si el dispositivo lo permite)">
+              <label class="switch">
                 <input id="switchTorch" type="checkbox">
                 <span class="slider"></span>
               </label>
@@ -80,11 +78,11 @@
           <small class="muted">También puedes ingresar el código manualmente.</small>
         </article>
 
-        <!-- VALIDAR CÓDIGO MANUAL -->
+        <!-- VALIDAR CÓDIGO -->
         <article class="card">
           <h3>Buscar/validar por código</h3>
           <div class="row">
-            <input id="codeInput" type="text" class="mono" placeholder="Ej. AB3K9T6P2C" aria-label="Código a validar">
+            <input id="codeInput" type="text" class="mono" placeholder="Ej. AB3K9T6P2C">
             <button id="btnLookup" class="btn" type="button">Buscar</button>
           </div>
 
@@ -135,36 +133,43 @@
         </article>
       </div>
 
-      <!-- AUDITORÍA / HISTORIAL -->
+      <!-- AUDITORÍA -->
       <article class="card mt16">
         <div class="card-header">
           <h3>Últimos canjes</h3>
-          <div class="row" style="gap:6px">
-            <button id="btnReloadAudit" class="btn ghost" type="button">Actualizar</button>
-          </div>
+          <button id="btnReloadAudit" class="btn ghost" type="button">Actualizar</button>
         </div>
 
-        <!-- KPIs -->
+        <!-- Métricas tipo tarjetas -->
         <div class="kpi-deck">
           <div class="kpi">
-            <div class="kpi__label">Total</div>
-            <div class="kpi__value" id="mTotal">0</div>
+            <div class="k">Total</div>
+            <div class="v" id="mTotal">0</div>
           </div>
           <div class="kpi">
-            <div class="kpi__label">Hoy</div>
-            <div class="kpi__value" id="mToday">0</div>
+            <div class="k">Hoy</div>
+            <div class="v" id="mToday">0</div>
           </div>
           <div class="kpi">
-            <div class="kpi__label">Últimos 7 días</div>
-            <div class="kpi__value" id="mWeek">0</div>
+            <div class="k">Últimos 7 días</div>
+            <div class="v" id="mWeek">0</div>
           </div>
           <div class="kpi">
-            <div class="kpi__label">Gerentes</div>
-            <div class="kpi__value" id="mManagers">0</div>
+            <div class="k">Gerentes</div>
+            <div class="v" id="mManagers">0</div>
+          </div>
+          <!-- NUEVOS KPIs EN TIEMPO REAL -->
+          <div class="kpi">
+            <div class="k">Válidos hoy</div>
+            <div class="v" id="mValidToday">0</div>
+          </div>
+          <div class="kpi">
+            <div class="k">Fallidos hoy</div>
+            <div class="v" id="mFailedToday">0</div>
           </div>
         </div>
 
-        <!-- Toolbar de filtros -->
+        <!-- Filtros -->
         <div class="toolbar">
           <div class="toolbar__group">
             <label class="field sm">
@@ -182,7 +187,7 @@
                 <option value="canjeado">Canjeado</option>
               </select>
             </label>
-            <label class="field sm grow">
+            <label class="field sm">
               <span>Gerente (correo)</span>
               <input id="fManager" type="text" placeholder="ej. gerente@empresa.com">
             </label>
@@ -192,7 +197,6 @@
           </div>
         </div>
 
-        <!-- Tabla -->
         <div class="table-wrap">
           <table class="table" id="auditTable">
             <thead>
@@ -219,73 +223,17 @@
   </footer>
 
   <!-- Modal de alerta -->
-<div id="alertOverlay" class="overlay" role="dialog" aria-modal="true" hidden>
-  <div class="modal" id="alertModal" tabindex="-1">
-    <h3 id="alertTitle">Aviso</h3>
-    <p id="alertText" class="muted"></p>
-    <div class="row right">
-      <!-- Fallback inline por si algún listener externo falla -->
-      <button id="alertClose" class="btn ghost" type="button" onclick="window.__hideAlert && window.__hideAlert(false)">Cerrar</button>
-      <button id="alertResume" class="btn" type="button" onclick="window.__hideAlert && window.__hideAlert(true)">Reanudar escaneo</button>
+  <div id="alertOverlay" class="overlay" hidden>
+    <div class="modal">
+      <h3 id="alertTitle">Aviso</h3>
+      <p id="alertText" class="muted"></p>
+      <div class="row right">
+        <button id="alertClose" class="btn ghost" type="button">Cerrar</button>
+        <button id="alertResume" class="btn" type="button">Reanudar escaneo</button>
+      </div>
     </div>
   </div>
-</div>
 
-<script>
-(()=> {
-  const overlay = document.getElementById('alertOverlay');
-  const btnClose = document.getElementById('alertClose');
-  const btnResume = document.getElementById('alertResume');
-  const titleEl = document.getElementById('alertTitle');
-  const textEl  = document.getElementById('alertText');
-
-  // API mínima para abrir/cerrar (usada también como fallback)
-  function _hide(resume){
-    try { overlay.setAttribute('hidden',''); } catch {}
-    try { if (resume && typeof window.startScan === 'function') window.startScan(); } catch {}
-  }
-  function _show(opts={}){
-    try {
-      titleEl.textContent = opts.title || 'Aviso';
-      textEl.textContent  = opts.text  || '';
-      overlay.removeAttribute('hidden');
-      // Pinta estilo si existe .modal
-      const m = overlay.querySelector('.modal');
-      if (m) {
-        m.classList.remove('warn','err','ok');
-        m.classList.add(opts.toneType==='err'?'err':opts.toneType==='ok'?'ok':'warn');
-      }
-      // Muestra/oculta botón reanudar
-      if (btnResume) btnResume.hidden = opts.canResume === false;
-    } catch {}
-  }
-
-  // Expón global por si tu manager.js quiere usarlo
-  window.__forceShowAlert = _show;
-  window.__forceHideAlert = _hide;
-
-  // Clicks de botones (funcionan aunque tu manager.js no cargue)
-  btnClose?.addEventListener('click', () => _hide(false));
-  btnResume?.addEventListener('click', () => _hide(true));
-
-  // Clic fuera cierra
-  overlay?.addEventListener('click', (ev) => {
-    if (ev.target === overlay) _hide(false);
-  });
-
-  // Tecla ESC cierra
-  document.addEventListener('keydown', (ev) => {
-    if (!overlay.hasAttribute('hidden') && ev.key === 'Escape') _hide(false);
-  });
-
-  // Si en algún lado dejaste onClick inline, que apunte a esto:
-  window.__hideAlert = (resume)=>_hide(!!resume);
-})();
-</script>
-
-
-
-  <!-- Lógica -->
   <script src="manager.js"></script>
 </body>
 </html>
