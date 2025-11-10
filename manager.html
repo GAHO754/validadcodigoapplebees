@@ -231,6 +231,59 @@
   </div>
 </div>
 
+<script>
+(()=> {
+  const overlay = document.getElementById('alertOverlay');
+  const btnClose = document.getElementById('alertClose');
+  const btnResume = document.getElementById('alertResume');
+  const titleEl = document.getElementById('alertTitle');
+  const textEl  = document.getElementById('alertText');
+
+  // API mínima para abrir/cerrar (usada también como fallback)
+  function _hide(resume){
+    try { overlay.setAttribute('hidden',''); } catch {}
+    try { if (resume && typeof window.startScan === 'function') window.startScan(); } catch {}
+  }
+  function _show(opts={}){
+    try {
+      titleEl.textContent = opts.title || 'Aviso';
+      textEl.textContent  = opts.text  || '';
+      overlay.removeAttribute('hidden');
+      // Pinta estilo si existe .modal
+      const m = overlay.querySelector('.modal');
+      if (m) {
+        m.classList.remove('warn','err','ok');
+        m.classList.add(opts.toneType==='err'?'err':opts.toneType==='ok'?'ok':'warn');
+      }
+      // Muestra/oculta botón reanudar
+      if (btnResume) btnResume.hidden = opts.canResume === false;
+    } catch {}
+  }
+
+  // Expón global por si tu manager.js quiere usarlo
+  window.__forceShowAlert = _show;
+  window.__forceHideAlert = _hide;
+
+  // Clicks de botones (funcionan aunque tu manager.js no cargue)
+  btnClose?.addEventListener('click', () => _hide(false));
+  btnResume?.addEventListener('click', () => _hide(true));
+
+  // Clic fuera cierra
+  overlay?.addEventListener('click', (ev) => {
+    if (ev.target === overlay) _hide(false);
+  });
+
+  // Tecla ESC cierra
+  document.addEventListener('keydown', (ev) => {
+    if (!overlay.hasAttribute('hidden') && ev.key === 'Escape') _hide(false);
+  });
+
+  // Si en algún lado dejaste onClick inline, que apunte a esto:
+  window.__hideAlert = (resume)=>_hide(!!resume);
+})();
+</script>
+
+
 
   <!-- Lógica -->
   <script src="manager.js"></script>
