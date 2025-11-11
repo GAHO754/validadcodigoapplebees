@@ -2,7 +2,10 @@
    Portal Gerentes — Canje (completo)
    =============================== */
 
-firebase.initializeApp(firebaseConfig);
+// Asegura que firebase-config.js se cargó y tiene databaseURL
+if (!firebase.apps.length) {
+  throw new Error("Firebase no está inicializado. Revisa firebase-config.js");
+}
 const auth = firebase.auth();
 const db   = firebase.database();
 
@@ -38,6 +41,12 @@ const rNote    = document.getElementById("rNote");
 const btnRedeem= document.getElementById("btnRedeem");
 const redeemMsg= document.getElementById("redeemMsg");
 
+/* Mini QR + modal */
+const miniQRWrap = document.getElementById("miniQRWrap");
+const miniQR     = document.getElementById("miniQR");
+const qrModal    = document.getElementById("qrModal");
+const qrFull     = document.getElementById("qrFull");
+
 /* Auditoría + KPIs */
 const auditTableBody = document.getElementById("auditTable").querySelector("tbody");
 const mTotal    = document.getElementById("mTotal");
@@ -53,15 +62,12 @@ const fStatus = document.getElementById("fStatus");
 const fManager= document.getElementById("fManager");
 const fApply  = document.getElementById("fApply");
 
-/* Modal */
+/* Modal de alerta */
 const alertOverlay = document.getElementById("alertOverlay");
 const alertTitle   = document.getElementById("alertTitle");
 const alertText    = document.getElementById("alertText");
 const alertClose   = document.getElementById("alertClose");
 const alertResume  = document.getElementById("alertResume");
-
-/* Mini QR (preview) */
-const miniQR = document.getElementById("miniQR");
 
 /* ---------- Utilidades ---------- */
 function toast(msg, kind="ok"){
@@ -121,7 +127,7 @@ auth.onAuthStateChanged(async (user)=>{
     mgrEmail.textContent = user.email || user.uid;
     await loadCameras();
     await loadAudit();
-    watchRealtimeKpisToday();   // KPIs en vivo
+    watchRealtimeKpisToday();
   } else {
     loginCard.hidden = false;
     dashboard.hidden = true;
@@ -200,12 +206,10 @@ function onScanSuccess(decodedText){
 
   let code = null;
 
-  // 1) Intentar parsear JSON del QR
   try {
     const obj = JSON.parse(decodedText);
     if (obj && obj.code) {
       code = String(obj.code).trim().toUpperCase();
-
       if (obj.exp && Date.now() > Number(obj.exp)) {
         logAttempt({ code: obj.code, userId: obj.uid || null, outcome:"fail", reason:"payload_expired" });
         showAlert({ title:"Cupón vencido", text:"El QR está expirado.", toneType:"err", canResume:true });
@@ -214,7 +218,6 @@ function onScanSuccess(decodedText){
     }
   } catch(_) {}
 
-  // 2) Si no era JSON, aceptar código alfanumérico
   if (!code) {
     const raw = String(decodedText||"").trim().toUpperCase();
     if (/^[A-Z0-9]{8,14}$/.test(raw)) code = raw;
@@ -242,20 +245,22 @@ codeInput?.addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ e.preventDefau
 
 async function lookupCode(code){
   redeemMsg.textContent = "";
+  miniQRWrap.hidden = true;
+  if (miniQR) miniQR.innerHTML = "";
 
   try {
-    const snap = await db.ref("redeems/" + code).get(); // ruta correcta
+    const snap = await db.ref("redeems/" + code).get();
     if (!snap.exists()) {
       logAttempt({ code, outcome:"fail", reason:"not_found" });
       showAlert({ title:"No encontrado", text:"Código no registrado.", toneType:"err", canResume:true });
-      // limpia QR si hubiera
-      if (miniQR) miniQR.innerHTML = "";
-      redeemCard.hidden = true;
       return;
     }
 
     const d = { code, ...snap.val() };
     fillRedeemCard(d);
+
+    // Genera vista previa de QR (si es posible)
+    await renderMiniQR(d);
 
     const st = String(d.status||"").toLowerCase();
     if (st !== "pending" && st !== "pendiente") {
@@ -274,27 +279,6 @@ function fmtDate(ms){
   return new Date(ms).toLocaleString("es-MX",{dateStyle:"short",timeStyle:"short"});
 }
 
-/* ===== mini-QR: genera/limpia preview ===== */
-function renderMiniQR(d){
-  if (!miniQR) return;
-  miniQR.innerHTML = "";
-  try{
-    // Payload compatible con el generado para el cliente
-    const payload = JSON.stringify({
-      v: 1,
-      brand: "Applebee's",
-      uid: d.userId || null,
-      code: d.code || "",
-      rewardId: d.rewardId || null,
-      cost: Number(d.cost || 0),
-      exp: Number(d.expiresAt || 0)
-    });
-    if (window.QRCode) {
-      new QRCode(miniQR, { text: payload, width: 100, height: 100 });
-    }
-  }catch(e){ /* silencioso */ }
-}
-
 function fillRedeemCard(d){
   redeemCard.hidden = false;
   rRewardName.textContent = d.rewardName || d.rewardId || "Cortesía";
@@ -311,13 +295,50 @@ function fillRedeemCard(d){
 
   const canRedeem = ["pending","pendiente"].includes(String(d.status||"").toLowerCase());
   btnRedeem.disabled = !canRedeem;
-
-  // ✅ Muestra QR chico SOLO si está pendiente; si no, lo limpia
-  if (canRedeem) renderMiniQR(d);
-  else if (miniQR) miniQR.innerHTML = "";
 }
 
-/* ---------- Canjear (actualiza /redeems + espejo + bitácora) ---------- */
+/* ---------- Mini QR + Modal ---------- */
+async function renderMiniQR(d){
+  try{
+    // Primero intenta obtener el payload del espejo del usuario
+    let payload = null;
+    if (d.userId) {
+      const p = await db.ref(`users/${d.userId}/redemptions/${d.code}/qrPayload`).get();
+      if (p.exists()) payload = p.val();
+    }
+    // Si no hay payload, crea uno mínimo para verificación
+    if (!payload) {
+      payload = JSON.stringify({ v: 1, code: d.code, rewardId: d.rewardId || null });
+    }
+
+    if (miniQR) {
+      miniQR.innerHTML = "";
+      new QRCode(miniQR, { text: payload, width: 130, height: 130 });
+      miniQRWrap.hidden = false;
+    }
+  }catch(e){
+    console.warn("No se pudo renderizar mini QR:", e);
+    miniQRWrap.hidden = true;
+  }
+}
+
+// Abrir modal con QR grande al tocar el mini
+if (miniQR && qrModal && qrFull) {
+  miniQR.addEventListener("click", () => {
+    try {
+      const canvas = miniQR.querySelector("canvas");
+      if (canvas) {
+        qrFull.src = canvas.toDataURL("image/png");
+        qrModal.hidden = false;
+      }
+    } catch (err) {
+      console.error("Error al ampliar QR:", err);
+    }
+  });
+  qrModal.addEventListener("click", () => { qrModal.hidden = true; });
+}
+
+/* ---------- Canjear ---------- */
 btnRedeem?.addEventListener("click", doRedeem);
 
 async function doRedeem(){
@@ -326,7 +347,6 @@ async function doRedeem(){
   const dataCode = rCode.textContent;
   if (!user || !dataCode) return;
 
-  // Revalida estado en /redeems
   const snap = await db.ref(`redeems/${dataCode}`).get();
   if (!snap.exists()){
     showAlert({title:"No encontrado", text:"El cupón ya no existe.", toneType:"err", canResume:true});
@@ -351,13 +371,11 @@ async function doRedeem(){
   const now = Date.now();
   const updates = {};
 
-  // Estado global del cupón
   updates[`/redeems/${dataCode}/status`]     = "redeemed";
   updates[`/redeems/${dataCode}/redeemedAt`] = now;
   updates[`/redeems/${dataCode}/redeemedBy`] = user.uid;
   if (note) updates[`/redeems/${dataCode}/note`] = note;
 
-  // Espejo en el usuario (si existe)
   if (d.userId) {
     updates[`/users/${d.userId}/redemptions/${dataCode}/status`]     = "canjeado";
     updates[`/users/${d.userId}/redemptions/${dataCode}/redeemedAt`] = now;
@@ -365,7 +383,6 @@ async function doRedeem(){
     if (note) updates[`/users/${d.userId}/redemptions/${dataCode}/note`] = note;
   }
 
-  // Bitácora para la tabla de auditoría
   const logKey = db.ref("redeemLogs").push().key;
   updates[`/redeemLogs/${logKey}`] = {
     code: dataCode,
@@ -388,7 +405,9 @@ async function doRedeem(){
     redeemMsg.textContent = "Canje exitoso.";
 
     const fresh = await db.ref(`redeems/${dataCode}`).get();
-    fillRedeemCard({ code: dataCode, ...fresh.val() });
+    const merged = { code: dataCode, ...fresh.val() };
+    fillRedeemCard(merged);
+    await renderMiniQR(merged);
     await loadAudit();
 
   } catch (e) {
@@ -398,7 +417,7 @@ async function doRedeem(){
   }
 }
 
-/* ---------- Auditoría (redeemLogs) ---------- */
+/* ---------- Auditoría ---------- */
 btnReloadAudit?.addEventListener("click", loadAudit);
 fApply?.addEventListener("click", loadAudit);
 [fFrom,fTo,fStatus,fManager].forEach(el=>{
@@ -461,34 +480,28 @@ function escapeHtml(s){
   return String(s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
 }
 
-/* ---------- KPIs en tiempo real: válidos / fallidos hoy ---------- */
+/* ---------- KPIs en tiempo real ---------- */
 function watchRealtimeKpisToday(){
   const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
   const from = startOfDay.getTime();
 
-  // Válidos hoy (redeemLogs con status: canjeado)
-  db.ref("redeemLogs")
-    .orderByChild("ts").startAt(from)
-    .on("value", (snap)=>{
-      const val = snap.val() || {};
-      let validToday = 0;
-      Object.values(val).forEach(x=>{
-        if (String(x.status||"").toLowerCase() === "canjeado") validToday++;
-      });
-      if (mValidToday) mValidToday.textContent = String(validToday);
+  db.ref("redeemLogs").orderByChild("ts").startAt(from).on("value", (snap)=>{
+    const val = snap.val() || {};
+    let validToday = 0;
+    Object.values(val).forEach(x=>{
+      if (String(x.status||"").toLowerCase() === "canjeado") validToday++;
     });
+    if (mValidToday) mValidToday.textContent = String(validToday);
+  });
 
-  // Fallidos hoy (redeemAttempts con outcome: fail)
-  db.ref("redeemAttempts")
-    .orderByChild("ts").startAt(from)
-    .on("value", (snap)=>{
-      const val = snap.val() || {};
-      let failedToday = 0;
-      Object.values(val).forEach(x=>{
-        if (String(x.outcome||"") === "fail") failedToday++;
-      });
-      if (mFailedToday) mFailedToday.textContent = String(failedToday);
+  db.ref("redeemAttempts").orderByChild("ts").startAt(from).on("value", (snap)=>{
+    const val = snap.val() || {};
+    let failedToday = 0;
+    Object.values(val).forEach(x=>{
+      if (String(x.outcome||"") === "fail") failedToday++;
     });
+    if (mFailedToday) mFailedToday.textContent = String(failedToday);
+  });
 }
 
 /* ---------- Exporta funciones globales ---------- */
