@@ -9,6 +9,46 @@ if (!firebase.apps.length) {
 const auth = firebase.auth();
 const db   = firebase.database();
 
+/* ===============================
+   ✅ LIVE PANEL CONFIG (NUEVO)
+   =============================== */
+const STORE_ID   = "APB_PASEO";                 // 👈 CAMBIA por sucursal real
+const STORE_NAME = "Applebee’s Paseo Central";  // 👈 CAMBIA por sucursal real
+
+async function pushLiveEvent(payload){
+  try{
+    const u = auth.currentUser;
+    const eventRef = db.ref("liveEvents").push();
+    const eventId = eventRef.key;
+
+    const now = Date.now();
+    const day = new Date(now);
+    const ymd = `${day.getFullYear()}${String(day.getMonth()+1).padStart(2,'0')}${String(day.getDate()).padStart(2,'0')}`;
+
+    const base = {
+      createdAt: now,
+      uid: u?.uid || "",
+      userEmail: u?.email || "",
+      brand: "Applebees",
+      storeId: STORE_ID,
+      storeName: STORE_NAME,
+      meta: {
+        source: "manager",
+        page: location.pathname || "",
+        ua: navigator.userAgent || ""
+      }
+    };
+
+    await eventRef.set({ ...base, ...payload });
+    await db.ref(`liveEventsByDay/${ymd}/${eventId}`).set(true);
+
+    return eventId;
+  }catch(e){
+    console.warn("pushLiveEvent error:", e);
+    return "";
+  }
+}
+
 /* ---------- Referencias UI ---------- */
 const loginCard = document.getElementById("loginCard");
 const dashboard = document.getElementById("dashboard");
@@ -128,6 +168,13 @@ auth.onAuthStateChanged(async (user)=>{
     await loadCameras();
     await loadAudit();
     watchRealtimeKpisToday();
+
+    // ✅ Live Panel: sesión gerente activa
+    pushLiveEvent({
+      type: "manager_session",
+      status: "ok",
+      manager: { uid: user.uid, email: user.email || "" }
+    }).catch(()=>{});
   } else {
     loginCard.hidden = false;
     dashboard.hidden = true;
@@ -205,13 +252,24 @@ function onScanSuccess(decodedText){
   stopScan(); // evita dobles lecturas
 
   let code = null;
+  let payloadObj = null;
 
   try {
     const obj = JSON.parse(decodedText);
     if (obj && obj.code) {
+      payloadObj = obj;
       code = String(obj.code).trim().toUpperCase();
       if (obj.exp && Date.now() > Number(obj.exp)) {
         logAttempt({ code: obj.code, userId: obj.uid || null, outcome:"fail", reason:"payload_expired" });
+
+        // ✅ Live Panel: QR expirado (payload)
+        pushLiveEvent({
+          type: "redeem_failed",
+          status: "err",
+          reason: "payload_expired",
+          redeem: { code, customerUid: obj.uid || "", exp: obj.exp || null }
+        }).catch(()=>{});
+
         showAlert({ title:"Cupón vencido", text:"El QR está expirado.", toneType:"err", canResume:true });
         return;
       }
@@ -224,9 +282,26 @@ function onScanSuccess(decodedText){
   }
 
   if (!code) {
+    // ✅ Live Panel: formato inválido
+    pushLiveEvent({
+      type: "scan_invalid_format",
+      status: "err",
+      raw: String(decodedText||"").slice(0,180)
+    }).catch(()=>{});
+
     showAlert({ title:"Formato no válido", text:"El QR no contiene un código válido.", toneType:"err", canResume:true });
     return;
   }
+
+  // ✅ Live Panel: scan recibido (solo info)
+  pushLiveEvent({
+    type: "redeem_scan",
+    status: "ok",
+    redeem: {
+      code,
+      customerUid: (payloadObj && payloadObj.uid) ? String(payloadObj.uid) : ""
+    }
+  }).catch(()=>{});
 
   codeInput.value = code;
   lookupCode(code);
@@ -252,11 +327,36 @@ async function lookupCode(code){
     const snap = await db.ref("redeems/" + code).get();
     if (!snap.exists()) {
       logAttempt({ code, outcome:"fail", reason:"not_found" });
+
+      // ✅ Live Panel: lookup fail
+      pushLiveEvent({
+        type: "redeem_lookup_fail",
+        status: "err",
+        reason: "not_found",
+        redeem: { code }
+      }).catch(()=>{});
+
       showAlert({ title:"No encontrado", text:"Código no registrado.", toneType:"err", canResume:true });
       return;
     }
 
     const d = { code, ...snap.val() };
+
+    // ✅ Live Panel: lookup ok
+    pushLiveEvent({
+      type: "redeem_lookup_ok",
+      status: "ok",
+      redeem: {
+        code,
+        customerUid: d.userId || "",
+        rewardId: d.rewardId || "",
+        rewardName: d.rewardName || "",
+        cost: Number(d.cost||0),
+        status: d.status || "",
+        expiresAt: d.expiresAt || null
+      }
+    }).catch(()=>{});
+
     fillRedeemCard(d);
 
     // Genera vista previa de QR (si es posible)
@@ -265,11 +365,37 @@ async function lookupCode(code){
     const st = String(d.status||"").toLowerCase();
     if (st !== "pending" && st !== "pendiente") {
       logAttempt({ code, userId: d.userId || null, outcome:"fail", reason:"already_redeemed" });
+
+      // ✅ Live Panel: ya canjeado
+      pushLiveEvent({
+        type: "redeem_failed",
+        status: "warn",
+        reason: "already_redeemed",
+        redeem: {
+          code,
+          customerUid: d.userId || "",
+          rewardId: d.rewardId || "",
+          rewardName: d.rewardName || "",
+          cost: Number(d.cost||0),
+          status: d.status || ""
+        }
+      }).catch(()=>{});
+
       showAlert({ title:"Cupón ya canjeado", text:"Este QR/código ya fue canjeado anteriormente.", toneType:"warn", canResume:true });
     }
 
   } catch (e) {
     console.error(e);
+
+    // ✅ Live Panel: error lookup
+    pushLiveEvent({
+      type: "redeem_lookup_fail",
+      status: "err",
+      reason: "lookup_error",
+      redeem: { code },
+      error: String(e?.message || e || "")
+    }).catch(()=>{});
+
     showAlert({ title:"Error", text:"No fue posible consultar el cupón.", toneType:"err", canResume:true });
   }
 }
@@ -349,6 +475,14 @@ async function doRedeem(){
 
   const snap = await db.ref(`redeems/${dataCode}`).get();
   if (!snap.exists()){
+    // ✅ Live Panel
+    pushLiveEvent({
+      type: "redeem_failed",
+      status: "err",
+      reason: "not_found",
+      redeem: { code: dataCode }
+    }).catch(()=>{});
+
     showAlert({title:"No encontrado", text:"El cupón ya no existe.", toneType:"err", canResume:true});
     return;
   }
@@ -356,6 +490,22 @@ async function doRedeem(){
 
   if (d.expiresAt && Date.now() > Number(d.expiresAt)){
     logAttempt({ code: dataCode, userId: d.userId || null, outcome:"fail", reason:"expired" });
+
+    // ✅ Live Panel
+    pushLiveEvent({
+      type: "redeem_failed",
+      status: "err",
+      reason: "expired",
+      redeem: {
+        code: dataCode,
+        customerUid: d.userId || "",
+        rewardId: d.rewardId || "",
+        rewardName: d.rewardName || "",
+        cost: Number(d.cost||0),
+        expiresAt: d.expiresAt || null
+      }
+    }).catch(()=>{});
+
     showAlert({title:"Cupón vencido", text:"La cortesía ya expiró.", toneType:"err", canResume:true});
     redeemMsg.textContent = "Cupón vencido."; return;
   }
@@ -363,6 +513,22 @@ async function doRedeem(){
   const st = String(d.status||"").toLowerCase();
   if (st !== "pending" && st !== "pendiente"){
     logAttempt({ code: dataCode, userId: d.userId || null, outcome:"fail", reason:"already_redeemed" });
+
+    // ✅ Live Panel
+    pushLiveEvent({
+      type: "redeem_failed",
+      status: "warn",
+      reason: "already_redeemed",
+      redeem: {
+        code: dataCode,
+        customerUid: d.userId || "",
+        rewardId: d.rewardId || "",
+        rewardName: d.rewardName || "",
+        cost: Number(d.cost||0),
+        status: d.status || ""
+      }
+    }).catch(()=>{});
+
     showAlert({title:"Cupón ya canjeado", text:"Este código ya fue canjeado.", toneType:"warn", canResume:true});
     redeemMsg.textContent = "El cupón ya fue canjeado."; return;
   }
@@ -401,6 +567,23 @@ async function doRedeem(){
   try {
     await db.ref().update(updates);
     logAttempt({ code: dataCode, userId: d.userId || null, outcome:"ok", reason:"redeemed" });
+
+    // ✅ Live Panel: CANJE OK (lo principal)
+    await pushLiveEvent({
+      type: "redeem_validated",
+      status: "ok",
+      manager: { uid: user.uid, email: user.email || "" },
+      redeem: {
+        code: dataCode,
+        customerUid: d.userId || "",
+        rewardId: d.rewardId || "",
+        rewardName: d.rewardName || "",
+        cost: Number(d.cost||0),
+        expiresAt: d.expiresAt || null,
+        note: note || ""
+      }
+    });
+
     toast("¡Canje realizado!", "ok");
     redeemMsg.textContent = "Canje exitoso.";
 
@@ -412,6 +595,23 @@ async function doRedeem(){
 
   } catch (e) {
     console.error(e);
+
+    // ✅ Live Panel: fallo update
+    pushLiveEvent({
+      type: "redeem_failed",
+      status: "err",
+      reason: "update_failed",
+      manager: { uid: user.uid, email: user.email || "" },
+      redeem: {
+        code: dataCode,
+        customerUid: d.userId || "",
+        rewardId: d.rewardId || "",
+        rewardName: d.rewardName || "",
+        cost: Number(d.cost||0)
+      },
+      error: String(e?.message || e || "")
+    }).catch(()=>{});
+
     redeemMsg.textContent = "No se pudo canjear.";
     btnRedeem.disabled = false;
   }
