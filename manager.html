@@ -13,241 +13,200 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <!-- Tu configuración -->
+
+  <!-- Configuración Firebase -->
   <script src="firebase-config.js"></script>
 
-  <!-- Lector QR -->
+  <!-- QR -->
   <script src="https://unpkg.com/html5-qrcode"></script>
-  <!-- Generador QR para vista previa -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
+
 <body class="bg">
-  <noscript>Este portal requiere JavaScript.</noscript>
+<noscript>Este portal requiere JavaScript.</noscript>
 
-  <header class="topbar">
-    <div class="brand">
-      <img src="manzanas.png" alt="logo" class="logo">
-      <h1>Gerentes — Canje</h1>
-    </div>
-    <div class="actions" id="sessionActions" hidden>
-      <span id="mgrEmail" class="muted"></span>
-      <button id="btnLogout" class="btn ghost" type="button">Salir</button>
-    </div>
-  </header>
+<header class="topbar">
+  <div class="brand">
+    <img src="manzanas.png" alt="logo" class="logo">
+    <h1>Gerentes — Canje</h1>
+  </div>
+  <div class="actions" id="sessionActions" hidden>
+    <span id="mgrEmail" class="muted"></span>
+    <button id="btnLogout" class="btn ghost" type="button">Salir</button>
+  </div>
+</header>
 
-  <main class="container">
-    <!-- LOGIN -->
-    <section id="loginCard" class="card auth">
-      <h2>Acceso de gerentes</h2>
-      <p class="muted">Ingresa con tu correo corporativo.</p>
-      <form id="loginForm" class="grid" autocomplete="on">
-        <label class="field">
-          <span>Correo</span>
-          <input id="loginEmail" type="email" placeholder="gerente@empresa.com" required>
-        </label>
-        <label class="field">
-          <span>Contraseña</span>
-          <input id="loginPass" type="password" placeholder="••••••••" required>
-        </label>
-        <button id="btnLogin" type="submit" class="btn primary">Entrar</button>
-      </form>
-      <p id="loginMsg" class="msg"></p>
-    </section>
+<main class="container">
 
-    <!-- DASHBOARD -->
-    <section id="dashboard" class="dash" hidden>
-      <div class="grid2">
-        <!-- ESCÁNER -->
-        <article class="card">
-          <div class="card-header">
-            <h3>Escanear código QR</h3>
-            <div class="toggle">
-              <label class="switch">
-                <input id="switchTorch" type="checkbox">
-                <span class="slider"></span>
-              </label>
-              <small>Linterna</small>
-            </div>
-          </div>
+<!-- LOGIN -->
+<section id="loginCard" class="card auth">
+  <h2>Acceso de gerentes</h2>
+  <p class="muted">Ingresa con tu correo corporativo.</p>
+  <form id="loginForm" class="grid">
+    <label class="field">
+      <span>Correo</span>
+      <input id="loginEmail" type="email" required>
+    </label>
+    <label class="field">
+      <span>Contraseña</span>
+      <input id="loginPass" type="password" required>
+    </label>
+    <button class="btn primary">Entrar</button>
+  </form>
+  <p id="loginMsg" class="msg"></p>
+</section>
 
-          <div id="qrRegion" class="qr-region" aria-label="Área de escaneo"></div>
+<!-- DASHBOARD -->
+<section id="dashboard" class="dash" hidden>
 
-          <div class="row mt8">
-            <select id="cameraSelect" class="select" aria-label="Seleccionar cámara"></select>
-            <button id="btnStartScan" class="btn" type="button">Iniciar</button>
-            <button id="btnStopScan" class="btn ghost" type="button">Detener</button>
-          </div>
-          <small class="muted">También puedes ingresar el código manualmente.</small>
-        </article>
+<div class="grid2">
 
-        <!-- VALIDAR CÓDIGO -->
-        <article class="card">
-          <h3>Buscar/validar por código</h3>
-          <div class="row">
-            <input id="codeInput" type="text" class="mono" placeholder="Ej. AB3K9T6P2C">
-            <button id="btnLookup" class="btn" type="button">Buscar</button>
-          </div>
+<!-- ESCÁNER -->
+<article class="card">
+  <h3>Escanear código QR</h3>
+  <div id="qrRegion" class="qr-region"></div>
+  <div class="row mt8">
+    <select id="cameraSelect"></select>
+    <button id="btnStartScan" class="btn">Iniciar</button>
+    <button id="btnStopScan" class="btn ghost">Detener</button>
+  </div>
+</article>
 
-          <hr class="sep">
-
-          <div id="redeemCard" class="redeem" hidden>
-            <div class="redeem-head">
-              <div>
-                <h4 id="rRewardName">—</h4>
-                <div class="tags">
-                  <span class="tag">Costo: <b id="rCost">0</b> pts</span>
-                  <span class="tag">Vence: <b id="rExpires">—</b></span>
-                </div>
-              </div>
-              <div class="status" id="rStatus">—</div>
-            </div>
-
-            <div class="grid2 mt8">
-              <div class="info">
-                <p class="label">Código</p>
-                <p class="mono" id="rCode">—</p>
-
-                <p class="label">Cliente (UID)</p>
-                <p class="mono" id="rUser">—</p>
-
-                <p class="label">Recompensa</p>
-                <p class="mono" id="rRewardId">—</p>
-              </div>
-              <div class="info">
-                <p class="label">Creado</p>
-                <p id="rCreated">—</p>
-
-                <p class="label">Estado</p>
-                <p id="rState">—</p>
-              </div>
-            </div>
-
-            <!-- Vista previa del QR + click para ampliar -->
-            <div class="mini-qr-wrap" id="miniQRWrap" hidden>
-              <div id="miniQR" class="mini-qr" aria-label="QR de cupón"></div>
-              <small class="muted">Vista previa del QR (toca para ampliar).</small>
-            </div>
-
-            <div class="row mt12">
-              <label class="field grow">
-                <span>Notas (opcional)</span>
-                <input id="rNote" type="text" placeholder="Ej. Entregado por Gerente No.2">
-              </label>
-              <button id="btnRedeem" class="btn primary" type="button">Canjear ahora</button>
-            </div>
-
-            <p id="redeemMsg" class="msg"></p>
-          </div>
-        </article>
-      </div>
-
-      <!-- AUDITORÍA -->
-      <article class="card mt16">
-        <div class="card-header">
-          <h3>Últimos canjes</h3>
-          <button id="btnReloadAudit" class="btn ghost" type="button">Actualizar</button>
-        </div>
-
-        <!-- KPIs -->
-        <div class="kpi-deck">
-          <div class="kpi">
-            <div class="k">Total</div>
-            <div class="v" id="mTotal">0</div>
-          </div>
-          <div class="kpi">
-            <div class="k">Hoy</div>
-            <div class="v" id="mToday">0</div>
-          </div>
-          <div class="kpi">
-            <div class="k">Últimos 7 días</div>
-            <div class="v" id="mWeek">0</div>
-          </div>
-          <div class="kpi">
-            <div class="k">Gerentes</div>
-            <div class="v" id="mManagers">0</div>
-          </div>
-          <div class="kpi">
-            <div class="k">Válidos hoy</div>
-            <div class="v" id="mValidToday">0</div>
-          </div>
-          <div class="kpi">
-            <div class="k">Fallidos hoy</div>
-            <div class="v" id="mFailedToday">0</div>
-          </div>
-        </div>
-
-        <!-- Filtros -->
-        <div class="toolbar">
-          <div class="toolbar__group">
-            <label class="field sm">
-              <span>Desde</span>
-              <input id="fFrom" type="date">
-            </label>
-            <label class="field sm">
-              <span>Hasta</span>
-              <input id="fTo" type="date">
-            </label>
-            <label class="field sm">
-              <span>Estado</span>
-              <select id="fStatus">
-                <option value="">Todos</option>
-                <option value="canjeado">Canjeado</option>
-              </select>
-            </label>
-            <label class="field sm">
-              <span>Gerente (correo)</span>
-              <input id="fManager" type="text" placeholder="ej. gerente@empresa.com">
-            </label>
-          </div>
-          <div class="toolbar__actions">
-            <button id="fApply" class="btn" type="button">Buscar</button>
-          </div>
-        </div>
-
-        <div class="table-wrap">
-          <table class="table" id="auditTable">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Código</th>
-                <th>Reward</th>
-                <th>Pts</th>
-                <th>Cliente</th>
-                <th>Gerente</th>
-                <th>Estado</th>
-                <th>Nota</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </article>
-    </section>
-  </main>
-
-  <footer class="foot">
-    <small>© 2025 Great American Hospitality</small>
-  </footer>
-
-  <!-- Modal de alerta -->
-  <div id="alertOverlay" class="overlay" hidden>
-    <div class="modal">
-      <h3 id="alertTitle">Aviso</h3>
-      <p id="alertText" class="muted"></p>
-      <div class="row right">
-        <button id="alertClose" class="btn ghost" type="button">Cerrar</button>
-        <button id="alertResume" class="btn" type="button">Reanudar escaneo</button>
-      </div>
-    </div>
+<!-- VALIDAR -->
+<article class="card">
+  <h3>Buscar / validar código</h3>
+  <div class="row">
+    <input id="codeInput" class="mono" placeholder="AB3K9T6P2C">
+    <button id="btnLookup" class="btn">Buscar</button>
   </div>
 
-  <!-- Modal QR grande -->
-  <div id="qrModal" class="qr-modal" hidden>
-    <div class="qr-modal-content">
-      <img id="qrFull" src="" alt="QR ampliado" />
-    </div>
-  </div>
+  <hr class="sep">
 
-  <script src="manager.js"></script>
+  <div id="redeemCard" hidden>
+
+    <h4 id="rRewardName">—</h4>
+
+    <p class="label">Código</p>
+    <p class="mono" id="rCode">—</p>
+
+    <p class="label">Cliente UID</p>
+    <p class="mono" id="rUser">—</p>
+
+    <p class="label">Estado</p>
+    <p id="rState">—</p>
+
+    <div class="row mt12">
+      <button id="btnInspect" class="btn secondary">
+        Inspeccionar cliente
+      </button>
+    </div>
+
+  </div>
+</article>
+
+</div>
+</section>
+
+</main>
+
+<!-- ================= MODAL INSPECTOR ================= -->
+
+<div id="inspectModal" class="overlay" hidden>
+  <div class="modal modal-xl">
+
+    <div class="modal-head">
+      <div>
+        <strong>Inspeccionar cliente</strong><br>
+        <small id="inspectClientEmail">—</small>
+      </div>
+      <button id="btnCloseInspect" class="btn ghost">✕</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- KPIs -->
+      <div class="inspect-kpis">
+        <div class="kpi-card">
+          <strong id="kpiPoints">0</strong>
+          <small>Puntos</small>
+        </div>
+        <div class="kpi-card">
+          <strong id="kpiRedeems">0</strong>
+          <small>Canjes</small>
+        </div>
+        <div class="kpi-card">
+          <strong id="kpiLastRedeem">—</strong>
+          <small>Último canje</small>
+        </div>
+      </div>
+
+      <!-- ALERTAS -->
+      <div class="inspect-alerts">
+        <h4>Alertas</h4>
+        <ul id="inspectAlerts">
+          <li class="ok">✔ Sin alertas</li>
+        </ul>
+      </div>
+
+      <!-- HISTORIAL -->
+      <div class="inspect-history">
+        <h4>Historial</h4>
+        <ul id="inspectHistory">
+          <li>—</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <div class="modal-foot row">
+      <button id="btnCancelInspect" class="btn ghost">Cancelar</button>
+      <button id="btnApproveRedeem" class="btn primary">
+        Aprobar canje
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ================= JS ================= -->
+
+<script>
+/* ===== MODAL INSPECTOR ===== */
+
+const inspectModal = document.getElementById("inspectModal");
+const btnCloseInspect = document.getElementById("btnCloseInspect");
+const btnCancelInspect = document.getElementById("btnCancelInspect");
+const btnInspect = document.getElementById("btnInspect");
+
+function openInspectModal(data = {}) {
+  inspectModal.hidden = false;
+
+  document.getElementById("inspectClientEmail").textContent =
+    data.email || "cliente@email.com";
+
+  document.getElementById("kpiPoints").textContent = data.points ?? 0;
+  document.getElementById("kpiRedeems").textContent = data.redeems ?? 0;
+  document.getElementById("kpiLastRedeem").textContent =
+    data.lastRedeem || "—";
+}
+
+btnCloseInspect.onclick =
+btnCancelInspect.onclick = () => {
+  inspectModal.hidden = true;
+};
+
+if (btnInspect) {
+  btnInspect.onclick = () => {
+    // EJEMPLO TEMPORAL
+    openInspectModal({
+      email: "cliente@demo.com",
+      points: 120,
+      redeems: 3,
+      lastRedeem: "Hoy"
+    });
+  };
+}
+</script>
+
 </body>
 </html>
