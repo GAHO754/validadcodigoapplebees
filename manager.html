@@ -9,15 +9,12 @@
   <link rel="icon" type="image/png" sizes="32x32" href="manzanas.png">
   <link rel="stylesheet" href="manager.css" />
 
-  <!-- Firebase (Compat) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
-  <!-- Configuración Firebase -->
   <script src="firebase-config.js"></script>
 
-  <!-- QR -->
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -38,82 +35,135 @@
 
 <main class="container">
 
-<!-- LOGIN -->
 <section id="loginCard" class="card auth">
   <h2>Acceso de gerentes</h2>
   <p class="muted">Ingresa con tu correo corporativo.</p>
   <form id="loginForm" class="grid">
     <label class="field">
       <span>Correo</span>
-      <input id="loginEmail" type="email" required>
+      <input id="loginEmail" type="email" required placeholder="gerente@applebees.com">
     </label>
     <label class="field">
       <span>Contraseña</span>
-      <input id="loginPass" type="password" required>
+      <input id="loginPass" type="password" required placeholder="••••••••">
     </label>
     <button class="btn primary">Entrar</button>
   </form>
   <p id="loginMsg" class="msg"></p>
 </section>
 
-<!-- DASHBOARD -->
 <section id="dashboard" class="dash" hidden>
 
-<div class="grid2">
-
-<!-- ESCÁNER -->
-<article class="card">
-  <h3>Escanear código QR</h3>
-  <div id="qrRegion" class="qr-region"></div>
-  <div class="row mt8">
-    <select id="cameraSelect"></select>
-    <button id="btnStartScan" class="btn">Iniciar</button>
-    <button id="btnStopScan" class="btn ghost">Detener</button>
-  </div>
-</article>
-
-<!-- VALIDAR -->
-<article class="card">
-  <h3>Buscar / validar código</h3>
-  <div class="row">
-    <input id="codeInput" class="mono" placeholder="AB3K9T6P2C">
-    <button id="btnLookup" class="btn">Buscar</button>
-  </div>
-
-  <hr class="sep">
-
-  <div id="redeemCard" hidden>
-
-    <h4 id="rRewardName">—</h4>
-
-    <p class="label">Código</p>
-    <p class="mono" id="rCode">—</p>
-
-    <p class="label">Cliente UID</p>
-    <p class="mono" id="rUser">—</p>
-
-    <p class="label">Estado</p>
-    <p id="rState">—</p>
-
-    <div class="row mt12">
-      <button id="btnInspect" class="btn secondary">
-        Inspeccionar cliente
-      </button>
+  <div class="kpi-grid">
+    <div class="card kpi">
+      <small>Total Histórico</small>
+      <strong id="mTotal">0</strong>
     </div>
-
+    <div class="card kpi">
+      <small>Canjes Hoy</small>
+      <strong id="mToday">0</strong>
+    </div>
+    <div class="card kpi">
+      <small>Válidos (Tiempo Real)</small>
+      <strong id="mValidToday" class="txt-ok">0</strong>
+    </div>
+    <div class="card kpi">
+      <small>Fallidos (Tiempo Real)</small>
+      <strong id="mFailedToday" class="txt-err">0</strong>
+    </div>
   </div>
-</article>
 
-</div>
+  <div class="grid2">
+    <article class="card">
+      <h3>Escanear código QR</h3>
+      <div id="qrRegion" class="qr-region"></div>
+      <div class="row mt8">
+        <select id="cameraSelect"></select>
+        <button id="btnStartScan" class="btn">Iniciar</button>
+        <button id="btnStopScan" class="btn ghost">Detener</button>
+      </div>
+    </article>
+
+    <article class="card">
+      <h3>Buscar / validar código</h3>
+      <div class="row">
+        <input id="codeInput" class="mono" placeholder="AB3K9T6P2C">
+        <button id="btnLookup" class="btn">Buscar</button>
+      </div>
+
+      <hr class="sep">
+
+      <div id="redeemCard" hidden>
+        <div class="redeem-header">
+           <h4 id="rRewardName">—</h4>
+           <div id="miniQRWrap" hidden><div id="miniQR"></div></div>
+        </div>
+
+        <div class="details-grid">
+          <div><p class="label">Código</p><p class="mono" id="rCode">—</p></div>
+          <div><p class="label">Estado</p><p id="rStatus" class="status">—</p></div>
+          <div><p class="label">Expira</p><p id="rExpires">—</p></div>
+          <div><p class="label">Costo</p><p id="rCost">0</p></div>
+        </div>
+        
+        <p class="label">Cliente UID</p>
+        <p class="mono small" id="rUser">—</p>
+
+        <div class="action-block mt12">
+          <textarea id="rNote" placeholder="Nota opcional (ej. Mesa 5)"></textarea>
+          <button id="btnRedeem" class="btn primary w100" disabled>Confirmar Canje</button>
+          <p id="redeemMsg" class="msg-small"></p>
+        </div>
+
+        <div class="row mt12">
+          <button id="btnInspect" class="btn secondary">Inspeccionar cliente</button>
+        </div>
+      </div>
+    </article>
+  </div>
+
+  <article class="card mt24">
+    <div class="row-between">
+      <h3>Historial Reciente</h3>
+      <button id="btnReloadAudit" class="btn ghost">Actualizar</button>
+    </div>
+    <div class="table-wrap">
+      <table id="auditTable">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Código</th>
+            <th>Premio</th>
+            <th>Costo</th>
+            <th>Cliente</th>
+            <th>Gerente</th>
+            <th>Estado</th>
+            <th>Nota</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="8" class="muted">Cargando bitácora...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
 </section>
-
 </main>
 
-<!-- ================= MODAL INSPECTOR ================= -->
+<div id="alertOverlay" class="overlay" hidden>
+  <div class="modal">
+    <h3 id="alertTitle">Aviso</h3>
+    <p id="alertText"></p>
+    <div class="row mt16">
+      <button id="alertClose" class="btn ghost">Cerrar</button>
+      <button id="alertResume" class="btn primary">Reanudar Escáner</button>
+    </div>
+  </div>
+</div>
 
 <div id="inspectModal" class="overlay" hidden>
   <div class="modal modal-xl">
-
     <div class="modal-head">
       <div>
         <strong>Inspeccionar cliente</strong><br>
@@ -121,92 +171,29 @@
       </div>
       <button id="btnCloseInspect" class="btn ghost">✕</button>
     </div>
-
     <div class="modal-body">
-
-      <!-- KPIs -->
       <div class="inspect-kpis">
-        <div class="kpi-card">
-          <strong id="kpiPoints">0</strong>
-          <small>Puntos</small>
-        </div>
-        <div class="kpi-card">
-          <strong id="kpiRedeems">0</strong>
-          <small>Canjes</small>
-        </div>
-        <div class="kpi-card">
-          <strong id="kpiLastRedeem">—</strong>
-          <small>Último canje</small>
-        </div>
+        <div class="kpi-card"><strong id="kpiPoints">0</strong><small>Puntos</small></div>
+        <div class="kpi-card"><strong id="kpiRedeems">0</strong><small>Canjes</small></div>
+        <div class="kpi-card"><strong id="kpiLastRedeem">—</strong><small>Último</small></div>
       </div>
-
-      <!-- ALERTAS -->
-      <div class="inspect-alerts">
-        <h4>Alertas</h4>
-        <ul id="inspectAlerts">
-          <li class="ok">✔ Sin alertas</li>
-        </ul>
-      </div>
-
-      <!-- HISTORIAL -->
-      <div class="inspect-history">
-        <h4>Historial</h4>
-        <ul id="inspectHistory">
-          <li>—</li>
-        </ul>
-      </div>
-
+      <h4>Historial</h4>
+      <ul id="inspectHistory" class="list-small"><li>—</li></ul>
     </div>
-
-    <div class="modal-foot row">
+    <div class="modal-foot">
       <button id="btnCancelInspect" class="btn ghost">Cancelar</button>
-      <button id="btnApproveRedeem" class="btn primary">
-        Aprobar canje
-      </button>
     </div>
-
   </div>
 </div>
 
-<!-- ================= JS ================= -->
+<div id="qrModal" class="overlay" hidden>
+  <div class="modal text-center">
+    <img id="qrFull" src="" alt="QR Grande">
+    <p class="muted mt8">Cerrar</p>
+  </div>
+</div>
 
-<script>
-/* ===== MODAL INSPECTOR ===== */
-
-const inspectModal = document.getElementById("inspectModal");
-const btnCloseInspect = document.getElementById("btnCloseInspect");
-const btnCancelInspect = document.getElementById("btnCancelInspect");
-const btnInspect = document.getElementById("btnInspect");
-
-function openInspectModal(data = {}) {
-  inspectModal.hidden = false;
-
-  document.getElementById("inspectClientEmail").textContent =
-    data.email || "cliente@email.com";
-
-  document.getElementById("kpiPoints").textContent = data.points ?? 0;
-  document.getElementById("kpiRedeems").textContent = data.redeems ?? 0;
-  document.getElementById("kpiLastRedeem").textContent =
-    data.lastRedeem || "—";
-}
-
-btnCloseInspect.onclick =
-btnCancelInspect.onclick = () => {
-  inspectModal.hidden = true;
-};
-
-if (btnInspect) {
-  btnInspect.onclick = () => {
-    // EJEMPLO TEMPORAL
-    openInspectModal({
-      email: "cliente@demo.com",
-      points: 120,
-      redeems: 3,
-      lastRedeem: "Hoy"
-    });
-  };
-}
-</script>
+<script src="manager.js"></script>
 
 </body>
 </html>
