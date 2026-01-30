@@ -707,3 +707,6 @@ function watchRealtimeKpisToday(){
 /* ---------- Exporta funciones globales ---------- */
 window.startScan = startScan;
 window.stopScan  = stopScan;
+// Añade estas dos líneas para que el código sepa de dónde sacar el correo y la clave
+const loginEmail = document.getElementById("loginEmail");
+const loginPass  = document.getElementById("loginPass");
