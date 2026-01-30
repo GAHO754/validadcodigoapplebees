@@ -406,24 +406,32 @@ function fmtDate(ms){
   );
 }
 
-
 function fillRedeemCard(d){
   redeemCard.hidden = false;
+
   rRewardName.textContent = d.rewardName || d.rewardId || "Cortesía";
-  rCost.textContent    = Number(d.cost||0);
-  rExpires.textContent = d.expiresAt ? fmtDate(d.expiresAt) : "—";
-  rStatus.textContent  = (d.status||"").toUpperCase();
-  rStatus.className    = "status " + String(d.status||"").toLowerCase();
+  rCost.textContent      = Number(d.cost || 0);
+  rExpires.textContent   = d.expiresAt ? fmtDate(d.expiresAt) : "—";
 
-  rCode.textContent    = d.code || "—";
-  rUser.textContent    = d.userId || "—";
-  rRewardId.textContent= d.rewardId || "—";
-  rCreated.textContent = fmtDate(d.createdAt);
-  rState.textContent   = d.status || "—";
+  rStatus.textContent = (d.status || "—").toUpperCase();
+  rStatus.className   = "status " + String(d.status || "").toLowerCase();
 
-  const canRedeem = ["pending","pendiente"].includes(String(d.status||"").toLowerCase());
+  rCode.textContent = d.code || "—";
+  rUser.textContent = d.userId || "—";
+
+  const canRedeem = ["pending","pendiente"].includes(
+    String(d.status || "").toLowerCase()
+  );
   btnRedeem.disabled = !canRedeem;
 }
+
+function safe(id){
+  const el = document.getElementById(id);
+  if(!el) console.warn("Elemento faltante:", id);
+  return el;
+}
+safe("rCreated")?.textContent = fmtDate(d.createdAt);
+
 
 /* ---------- Mini QR + Modal ---------- */
 async function renderMiniQR(d){
