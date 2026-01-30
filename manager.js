@@ -151,8 +151,13 @@ function showAlert({title="Aviso", text="", toneType="warn", canResume=true} = {
 }
 function hideAlert(resume=false){
   alertOverlay.hidden = true;
-  if (resume) startScan();
+
+  if (resume){
+    resetRedeemState();   // ✅ LIMPIA TODO
+    startScan();
+  }
 }
+
 alertClose?.addEventListener("click",()=>hideAlert(false));
 alertResume?.addEventListener("click",()=>hideAlert(true));
 alertOverlay?.addEventListener("click",(e)=>{ if(e.target===alertOverlay)hideAlert(false); });
@@ -316,94 +321,91 @@ btnLookup?.addEventListener("click", ()=>{
   if (!code) return toast("Ingresa un código.", "warn");
   lookupCode(code);
 });
-codeInput?.addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ e.preventDefault(); btnLookup.click(); } });
 
+codeInput?.addEventListener("keydown",(e)=>{
+  if(e.key==="Enter"){
+    e.preventDefault();
+    btnLookup.click();
+  }
+});
+
+/* ---------- LOOKUP (CORRECTO) ---------- */
 async function lookupCode(code){
-  redeemMsg.textContent = "";
-  miniQRWrap.hidden = true;
-  if (miniQR) miniQR.innerHTML = "";
+  resetRedeemState();
 
-  try {
-    const snap = await db.ref("redeems/" + code).get();
-    if (!snap.exists()) {
-      logAttempt({ code, outcome:"fail", reason:"not_found" });
+  try{
+    const snap = await db.ref(`redeems/${code}`).get();
 
-      // ✅ Live Panel: lookup fail
+    if(!snap.exists()){
       pushLiveEvent({
-        type: "redeem_lookup_fail",
-        status: "err",
-        reason: "not_found",
-        redeem: { code }
+        type:"redeem_lookup",
+        status:"not_found",
+        redeem:{ code }
       }).catch(()=>{});
 
-      showAlert({ title:"No encontrado", text:"Código no registrado.", toneType:"err", canResume:true });
+      showAlert({
+        title:"No encontrado",
+        text:"Código no registrado.",
+        toneType:"err",
+        canResume:true
+      });
       return;
     }
 
     const d = { code, ...snap.val() };
 
-    // ✅ Live Panel: lookup ok
     pushLiveEvent({
-      type: "redeem_lookup_ok",
-      status: "ok",
-      redeem: {
+      type:"redeem_lookup_ok",
+      status:"ok",
+      redeem:{
         code,
-        customerUid: d.userId || "",
-        rewardId: d.rewardId || "",
-        rewardName: d.rewardName || "",
-        cost: Number(d.cost||0),
-        status: d.status || "",
-        expiresAt: d.expiresAt || null
+        rewardId:d.rewardId || "",
+        rewardName:d.rewardName || "",
+        cost:Number(d.cost||0),
+        status:d.status || ""
       }
     }).catch(()=>{});
 
     fillRedeemCard(d);
 
-    // Genera vista previa de QR (si es posible)
-    await renderMiniQR(d);
-
-    const st = String(d.status||"").toLowerCase();
-    if (st !== "pending" && st !== "pendiente") {
-      logAttempt({ code, userId: d.userId || null, outcome:"fail", reason:"already_redeemed" });
-
-      // ✅ Live Panel: ya canjeado
-      pushLiveEvent({
-        type: "redeem_failed",
-        status: "warn",
-        reason: "already_redeemed",
-        redeem: {
-          code,
-          customerUid: d.userId || "",
-          rewardId: d.rewardId || "",
-          rewardName: d.rewardName || "",
-          cost: Number(d.cost||0),
-          status: d.status || ""
-        }
-      }).catch(()=>{});
-
-      showAlert({ title:"Cupón ya canjeado", text:"Este QR/código ya fue canjeado anteriormente.", toneType:"warn", canResume:true });
+    if(!["pending","pendiente"].includes(String(d.status).toLowerCase())){
+      showAlert({
+        title:"Cupón ya canjeado",
+        text:"Este cupón ya fue utilizado.",
+        toneType:"warn",
+        canResume:true
+      });
     }
 
-  } catch (e) {
+  }catch(e){
     console.error(e);
 
-    // ✅ Live Panel: error lookup
     pushLiveEvent({
-      type: "redeem_lookup_fail",
-      status: "err",
-      reason: "lookup_error",
-      redeem: { code },
-      error: String(e?.message || e || "")
+      type:"redeem_lookup_fail",
+      status:"err",
+      reason:"lookup_error",
+      redeem:{ code },
+      error:String(e?.message || e || "")
     }).catch(()=>{});
 
-    showAlert({ title:"Error", text:"No fue posible consultar el cupón.", toneType:"err", canResume:true });
+    showAlert({
+      title:"Error",
+      text:"No fue posible consultar el cupón.",
+      toneType:"err",
+      canResume:true
+    });
   }
 }
 
+/* ---------- Utils ---------- */
 function fmtDate(ms){
   if(!ms) return "—";
-  return new Date(ms).toLocaleString("es-MX",{dateStyle:"short",timeStyle:"short"});
+  return new Date(ms).toLocaleString(
+    "es-MX",
+    { dateStyle:"short", timeStyle:"short" }
+  );
 }
+
 
 function fillRedeemCard(d){
   redeemCard.hidden = false;
@@ -710,3 +712,23 @@ window.stopScan  = stopScan;
 // Añade estas dos líneas para que el código sepa de dónde sacar el correo y la clave
 const loginEmail = document.getElementById("loginEmail");
 const loginPass  = document.getElementById("loginPass");
+
+function resetRedeemState(){
+  redeemCard.hidden = true;
+
+  rRewardName.textContent = "—";
+  rCost.textContent = "0";
+  rExpires.textContent = "—";
+  rStatus.textContent = "—";
+  rStatus.className = "status";
+  rCode.textContent = "—";
+  rUser.textContent = "—";
+
+  rNote.value = "";
+  redeemMsg.textContent = "";
+
+  btnRedeem.disabled = true;
+
+  miniQRWrap.hidden = true;
+  if (miniQR) miniQR.innerHTML = "";
+}
