@@ -64,6 +64,14 @@
       <strong id="mToday">0</strong>
     </div>
     <div class="card kpi">
+      <small>Canjes Semanales</small>
+      <strong id="mWeek">0</strong>
+    </div>
+    <div class="card kpi">
+      <small>Gerentes Activos</small>
+      <strong id="mManagers">0</strong>
+    </div>
+    <div class="card kpi">
       <small>Válidos (Tiempo Real)</small>
       <strong id="mValidToday" class="txt-ok">0</strong>
     </div>
@@ -123,30 +131,30 @@
   </div>
 
   <article class="card mt24">
-    <div class="row-between">
-      <h3>Historial Reciente</h3>
-      <button id="btnReloadAudit" class="btn ghost">Actualizar</button>
-    </div>
-    <div class="table-wrap">
-      <table id="auditTable">
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Código</th>
-            <th>Premio</th>
-            <th>Costo</th>
-            <th>Cliente</th>
-            <th>Gerente</th>
-            <th>Estado</th>
-            <th>Nota</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td colspan="8" class="muted">Cargando bitácora...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </article>
+  <div class="row-between">
+    <h3>Historial Reciente</h3>
+    <button id="btnReloadAudit" class="btn ghost">Actualizar</button>
+  </div>
+  
+  <div class="table-wrap">
+    <table id="auditTable" class="table"> <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Código</th>
+          <th>Premio</th>
+          <th>Costo</th>
+          <th>Cliente</th>
+          <th>Gerente</th>
+          <th>Estado</th>
+          <th>Nota</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="8" class="muted">Cargando bitácora...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</article>
 
 </section>
 </main>
