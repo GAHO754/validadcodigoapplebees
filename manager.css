@@ -148,3 +148,68 @@ input:checked + .slider:before{ transform:translateX(20px); }
 /* Fuerza que el overlay se oculte al tener [hidden] */
 .overlay[hidden]{ display:none !important; }
 
+/* ===== INSPECTOR MODAL (DESKTOP) ===== */
+
+.modal-xl {
+  width: 1100px;
+  max-width: 95vw;
+}
+
+/* KPIs */
+.inspect-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.kpi-card {
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+}
+
+.kpi-card strong {
+  font-size: 22px;
+  display: block;
+}
+
+.kpi-card small {
+  opacity: .75;
+}
+
+/* Alertas */
+.inspect-alerts ul,
+.inspect-history ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 8px 0 0;
+}
+
+.inspect-alerts li {
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.inspect-alerts li.warn {
+  color: #ffdfaa;
+}
+
+.inspect-alerts li.ok {
+  color: #9be49b;
+}
+
+.inspect-alerts li.err {
+  color: #ff9b9b;
+}
+
+/* Historial */
+.inspect-history li {
+  font-size: 13px;
+  padding: 6px 0;
+  opacity: .85;
+  border-bottom: 1px dashed rgba(255,255,255,.08);
+}
+
