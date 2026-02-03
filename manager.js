@@ -398,6 +398,7 @@ async function lookupCode(code){
 }
 
 /* ---------- Utils ---------- */
+/* ---------- Utils ---------- */
 function fmtDate(ms){
   if(!ms) return "—";
   return new Date(ms).toLocaleString(
@@ -407,11 +408,18 @@ function fmtDate(ms){
 }
 
 function fillRedeemCard(d){
+  if (!redeemCard) return; // Seguridad
   redeemCard.hidden = false;
 
   rRewardName.textContent = d.rewardName || d.rewardId || "Cortesía";
-  rCost.textContent      = Number(d.cost || 0);
-  rExpires.textContent   = d.expiresAt ? fmtDate(d.expiresAt) : "—";
+  rCost.textContent       = Number(d.cost || 0);
+  rExpires.textContent    = d.expiresAt ? fmtDate(d.expiresAt) : "—";
+  
+  // CORRECCIÓN: Manejo seguro de rCreated
+  const rCreatedEl = document.getElementById("rCreated");
+  if (rCreatedEl) {
+    rCreatedEl.textContent = d.createdAt ? fmtDate(d.createdAt) : "—";
+  }
 
   rStatus.textContent = (d.status || "—").toUpperCase();
   rStatus.className   = "status " + String(d.status || "").toLowerCase();
@@ -422,7 +430,8 @@ function fillRedeemCard(d){
   const canRedeem = ["pending","pendiente"].includes(
     String(d.status || "").toLowerCase()
   );
-  btnRedeem.disabled = !canRedeem;
+  
+  if (btnRedeem) btnRedeem.disabled = !canRedeem;
 }
 
 function safe(id){
