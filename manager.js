@@ -408,17 +408,16 @@ function fmtDate(ms){
 }
 
 function fillRedeemCard(d){
-  if (!redeemCard) return; // Seguridad
   redeemCard.hidden = false;
 
   rRewardName.textContent = d.rewardName || d.rewardId || "Cortesía";
   rCost.textContent       = Number(d.cost || 0);
   rExpires.textContent    = d.expiresAt ? fmtDate(d.expiresAt) : "—";
-  
-  // CORRECCIÓN: Manejo seguro de rCreated
-  const rCreatedEl = document.getElementById("rCreated");
-  if (rCreatedEl) {
-    rCreatedEl.textContent = d.createdAt ? fmtDate(d.createdAt) : "—";
+
+  // AGREGA ESTO AQUÍ (Es la forma segura):
+  const rCreated = document.getElementById("rCreated");
+  if (rCreated) {
+    rCreated.textContent = d.createdAt ? fmtDate(d.createdAt) : "—";
   }
 
   rStatus.textContent = (d.status || "—").toUpperCase();
@@ -430,7 +429,6 @@ function fillRedeemCard(d){
   const canRedeem = ["pending","pendiente"].includes(
     String(d.status || "").toLowerCase()
   );
-  
   if (btnRedeem) btnRedeem.disabled = !canRedeem;
 }
 
