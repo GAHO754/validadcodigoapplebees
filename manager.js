@@ -439,7 +439,6 @@ function safe(id){
   if(!el) console.warn("Elemento faltante:", id);
   return el;
 }
-safe("rCreated")?.textContent = fmtDate(d.createdAt);
 
 
 /* ---------- Mini QR + Modal ---------- */
@@ -749,3 +748,4 @@ function resetRedeemState(){
   miniQRWrap.hidden = true;
   if (miniQR) miniQR.innerHTML = "";
 }
+
