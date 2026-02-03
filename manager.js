@@ -1,6 +1,3 @@
-/* ===============================
-   Portal Gerentes — Canje (completo)
-   =============================== */
 
 // Asegura que firebase-config.js se cargó y tiene databaseURL
 if (!firebase.apps.length) {
@@ -397,8 +394,6 @@ async function lookupCode(code){
   }
 }
 
-/* ---------- Utils ---------- */
-/* ---------- Utils ---------- */
 function fmtDate(ms){
   if(!ms) return "—";
   return new Date(ms).toLocaleString(
@@ -746,4 +741,3 @@ function resetRedeemState(){
   miniQRWrap.hidden = true;
   if (miniQR) miniQR.innerHTML = "";
 }
-
