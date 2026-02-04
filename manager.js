@@ -229,9 +229,9 @@ async function startScan() {
   
   // Si no hay cámaras detectadas, intentamos usar la cámara trasera por defecto
   const config = { 
-    fps: 15, // Un poco más fluido para tablets
-    qrbox: { width: 250, height: 250 },
-    aspectRatio: 1.0 // Fuerza el cuadro 1:1 para que coincida con tu CSS
+    fps: 15, 
+    qrbox: { width: 250, height: 250 }, // Tamaño del cuadro de enfoque
+    aspectRatio: 1.0 
   };
 
   html5qr = new Html5Qrcode("qrRegion");
