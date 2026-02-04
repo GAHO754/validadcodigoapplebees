@@ -121,11 +121,21 @@
         <p class="label">Cliente UID</p>
         <p class="mono small" id="rUser">—</p>
 
-        <div class="action-block mt12">
-          <textarea id="rNote" placeholder="Nota opcional (ej. Mesa 5)"></textarea>
-          <button id="btnRedeem" class="btn primary w100" disabled>Confirmar Canje</button>
-          <p id="redeemMsg" class="msg-small"></p>
-        </div>
+          <div class="action-block mt12">
+    <label class="field" style="margin-bottom: 10px; display: block;">
+      <span style="color: var(--warn); font-weight: bold;">* Sucursal de Canje:</span>
+      <select id="rStoreSelect" required style="border: 1px solid var(--accent);">
+        <option value="">-- Selecciona Sucursal --</option>
+        <option value="Torres">Applebee's Torres</option>
+        <option value="Paseo">Applebee's Paseo Triunfo</option>
+        <option value="Tecnologico">Applebee's Tecnológico</option>
+      </select>
+    </label>
+
+  <textarea id="rNote" placeholder="Nota opcional (ej. Mesa 5)"></textarea>
+  <button id="btnRedeem" class="btn primary w100" disabled>Confirmar Canje</button>
+  <p id="redeemMsg" class="msg-small"></p>
+</div>
 
         <div class="row mt12">
           <button id="btnInspect" class="btn secondary">Inspeccionar cliente</button>
