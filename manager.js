@@ -1,3 +1,6 @@
+/* ===============================
+   Portal Gerentes — Canje (completo)
+   =============================== */
 
 // Asegura que firebase-config.js se cargó y tiene databaseURL
 if (!firebase.apps.length) {
@@ -196,30 +199,60 @@ btnLogout?.addEventListener("click", ()=> auth.signOut());
 let html5qr = null;
 let currentCameraId = null;
 
-async function loadCameras(){
-  try{
+async function loadCameras() {
+  try {
     const devices = await Html5Qrcode.getCameras();
     cameraSel.innerHTML = "";
-    devices.forEach(d=>{
-      const opt = document.createElement("option");
-      opt.value = d.id; opt.textContent = d.label || d.id;
-      cameraSel.appendChild(opt);
-    });
-    if (devices.length){ currentCameraId = devices[0].id; cameraSel.value = currentCameraId; }
-  }catch(e){ console.warn("No se pudieron listar cámaras:", e); }
+    if (devices && devices.length > 0) {
+      devices.forEach((d, index) => {
+        const opt = document.createElement("option");
+        opt.value = d.id;
+        // Si el label está vacío, le ponemos un nombre genérico
+        opt.textContent = d.label || `Cámara ${index + 1}`;
+        cameraSel.appendChild(opt);
+      });
+      
+      // Intentar seleccionar la cámara trasera (back/rear) por defecto
+      const backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('trasera'));
+      currentCameraId = backCam ? backCam.id : devices[0].id;
+      cameraSel.value = currentCameraId;
+    }
+  } catch (e) { 
+    console.warn("No se pudieron listar cámaras:", e); 
+  }
 }
-async function startScan(){
+async function startScan() {
   if (html5qr) return;
-  if (!cameraSel.options.length) await loadCameras().catch(()=>{});
-  const camId = cameraSel.value || currentCameraId;
-  if (!camId){ toast("Selecciona una cámara.", "err"); return; }
+  if (!cameraSel.options.length) await loadCameras().catch(() => {});
+  
+  const camId = cameraSel.value;
+  
+  // Si no hay cámaras detectadas, intentamos usar la cámara trasera por defecto
+  const config = { 
+    fps: 15, // Un poco más fluido para tablets
+    qrbox: { width: 250, height: 250 },
+    aspectRatio: 1.0 // Fuerza el cuadro 1:1 para que coincida con tu CSS
+  };
 
   html5qr = new Html5Qrcode("qrRegion");
-  const config = { fps: 12, qrbox: { width: 260, height: 260 } };
-  try{
-    await html5qr.start({ deviceId:{ exact: camId } }, config, onScanSuccess);
-    btnStart.disabled = true; btnStop.disabled = false;
-  }catch(e){ toast("No se pudo iniciar el escáner.", "err"); await stopScan(); }
+  
+  try {
+    // Si tenemos un ID de cámara, lo usamos. Si no, pedimos la trasera ("environment")
+    const cameraParam = camId ? { deviceId: { exact: camId } } : { facingMode: "environment" };
+    
+    await html5qr.start(
+      cameraParam, 
+      config, 
+      onScanSuccess
+    );
+    
+    btnStart.disabled = true; 
+    btnStop.disabled = false;
+  } catch (e) { 
+    console.error("Error al iniciar cámara:", e);
+    toast("Error: Asegúrate de dar permisos de cámara.", "err"); 
+    await stopScan(); 
+  }
 }
 async function stopScan(){
   if (!html5qr){ btnStart.disabled=false; btnStop.disabled=true; return; }
@@ -394,6 +427,8 @@ async function lookupCode(code){
   }
 }
 
+/* ---------- Utils ---------- */
+/* ---------- Utils ---------- */
 function fmtDate(ms){
   if(!ms) return "—";
   return new Date(ms).toLocaleString(
@@ -741,3 +776,4 @@ function resetRedeemState(){
   miniQRWrap.hidden = true;
   if (miniQR) miniQR.innerHTML = "";
 }
+
