@@ -114,10 +114,12 @@ input:focus, select:focus {
 /* --- QR Region Corregida --- */
 .qr-region {
   width: 100%;
-  min-height: 300px; /* Cambiamos aspect-ratio por min-height para dar espacio */
-  background: #000; /* Fondo negro puro para que resalte el video */
-  border: 2px dashed #3954ff; /* Un color más visible para saber dónde está el área */
-  border-radius: 16px;
+  max-width: 450px; /* Esto evita que se haga gigante en la iPad */
+  margin: 0 auto;   /* Lo centra horizontalmente */
+  aspect-ratio: 1/1; 
+  background: #000;
+  border: 2px solid var(--line);
+  border-radius: 20px;
   overflow: hidden;
   position: relative;
   display: flex;
@@ -125,19 +127,16 @@ input:focus, select:focus {
   justify-content: center;
 }
 
-/* Esta regla es vital: asegura que el video de la cámara ocupe el ancho y se vea bien */
+/* Forzamos a que el video interno respete el tamaño del contenedor */
 .qr-region video {
   width: 100% !important;
-  height: auto !important;
-  object-fit: cover; /* Esto hará que el video llene el recuadro sin deformarse */
-  border-radius: 14px;
+  height: 100% !important;
+  object-fit: cover !important; /* Corta los bordes sobrantes para que siempre sea un cuadrado */
 }
 
-/* Estilo para los elementos internos que genera la librería html5-qrcode */
+/* Esto ajusta el visor (el cuadrito blanco que enfoca el QR) */
 #qrRegion__scan_region {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  background: transparent !important;
 }
 
 /* --- Status Badges --- */
