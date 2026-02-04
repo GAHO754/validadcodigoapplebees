@@ -149,11 +149,16 @@ input:focus, select:focus {
 
 /* --- Table Styles --- */
 .table-wrap { 
-  overflow-x: auto; border: 1px solid var(--line); 
-  border-radius: 14px; margin-top: 10px; 
+  overflow-x: auto; /* Esto permite deslizar a los lados si no cabe todo */
+  border: 1px solid var(--line); 
+  border-radius: 14px; 
+  margin-top: 10px; 
+  -webkit-overflow-scrolling: touch; /* Suavidad al deslizar en iPad */
 }
 
-table { width: 100%; border-collapse: collapse; text-align: left; }
+table {
+  min-width: 900px; /* Obliga a la tabla a mantener un ancho mínimo para que no se amontone el texto */
+}
 th { background: #1a1f2b; padding: 14px; color: var(--muted); font-weight: 600; }
 td { padding: 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 tr:last-child td { border-bottom: none; }
