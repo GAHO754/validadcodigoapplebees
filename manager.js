@@ -715,19 +715,22 @@ async function loadAudit(){
     mWeek.textContent     = weekCount;
     mManagers.textContent = managers.size;
 
-    const rows = items.map(x=> `
-      <tr>
-        <td>${x.ts ? new Date(x.ts).toLocaleString("es-MX",{dateStyle:"short",timeStyle:"short"}) : "—"}</td>
-        <td class="mono">${x.code||""}</td>
-        <td>${x.rewardName||x.rewardId||""}</td>
-        <td>${Number(x.cost||0)}</td>
-        <td class="mono">${x.userId||""}</td>
-        <td class="mono">${x.redeemedByEmail||x.redeemedBy||""}</td>
-        <td>${(x.status||"").toUpperCase()}</td>
-        <td>${x.note?escapeHtml(x.note):""}</td>
-      </tr>
-    `);
-    auditTableBody.innerHTML = rows.join("") || `<tr><td colspan="8" class="muted">Sin canjes con los filtros actuales.</td></tr>`;
+    // Busca este bloque dentro de loadAudit() y reemplázalo:
+const rows = items.map(x => `
+  <tr>
+    <td>${x.ts ? new Date(x.ts).toLocaleString("es-MX",{dateStyle:"short",timeStyle:"short"}) : "—"}</td>
+    <td class="mono">${x.code || ""}</td>
+    <td>${x.rewardName || x.rewardId || ""}</td>
+    <td style="font-weight: bold; color: var(--warn);">${x.store || "—"}</td> <td>${Number(x.cost || 0)}</td>
+    <td class="mono" style="font-size: 0.8rem;">${x.userId || ""}</td>
+    <td class="mono">${x.redeemedByEmail || x.redeemedBy || ""}</td>
+    <td>${(x.status || "").toUpperCase()}</td>
+    <td>${x.note ? escapeHtml(x.note) : ""}</td>
+  </tr>
+`);
+
+// No olvides actualizar el colspan aquí también por si la tabla está vacía:
+auditTableBody.innerHTML = rows.join("") || `<tr><td colspan="9" class="muted">Sin canjes con los filtros actuales.</td></tr>`;
   }catch(e){
     console.error(e);
     auditTableBody.innerHTML = `<tr><td colspan="8" class="err">No se pudo cargar la bitácora.</td></tr>`;
