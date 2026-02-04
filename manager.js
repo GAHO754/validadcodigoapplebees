@@ -108,6 +108,9 @@ const alertTitle   = document.getElementById("alertTitle");
 const alertText    = document.getElementById("alertText");
 const alertClose   = document.getElementById("alertClose");
 const alertResume  = document.getElementById("alertResume");
+/*MNODALES EXTRTAS QUE AGREGUE YO */
+const rStoreSelect = document.getElementById("rStoreSelect");
+
 
 /* ---------- Utilidades ---------- */
 function toast(msg, kind="ok"){
@@ -444,7 +447,6 @@ function fillRedeemCard(d){
   rCost.textContent       = Number(d.cost || 0);
   rExpires.textContent    = d.expiresAt ? fmtDate(d.expiresAt) : "—";
 
-  // AGREGA ESTO AQUÍ (Es la forma segura):
   const rCreated = document.getElementById("rCreated");
   if (rCreated) {
     rCreated.textContent = d.createdAt ? fmtDate(d.createdAt) : "—";
@@ -456,10 +458,27 @@ function fillRedeemCard(d){
   rCode.textContent = d.code || "—";
   rUser.textContent = d.userId || "—";
 
-  const canRedeem = ["pending","pendiente"].includes(
+  // --- NUEVA LÓGICA DE VALIDACIÓN CON SUCURSAL ---
+  
+  // 1. Verificamos si el cupón está pendiente
+  const isPending = ["pending","pendiente"].includes(
     String(d.status || "").toLowerCase()
   );
-  if (btnRedeem) btnRedeem.disabled = !canRedeem;
+
+  // 2. Creamos una función interna para revisar si el botón debe prenderse
+  const validateRedeemAction = () => {
+    const hasStore = rStoreSelect.value !== ""; // ¿Ya eligió sucursal?
+    if (btnRedeem) {
+      // El botón solo se activa si está pendiente Y tiene sucursal elegida
+      btnRedeem.disabled = !(isPending && hasStore);
+    }
+  };
+
+  // 3. Escuchamos cuando el gerente cambie la sucursal para validar al momento
+  rStoreSelect.onchange = validateRedeemAction;
+
+  // 4. Ejecutamos la validación de inmediato al cargar los datos
+  validateRedeemAction();
 }
 
 function safe(id){
@@ -513,108 +532,110 @@ if (miniQR && qrModal && qrFull) {
 /* ---------- Canjear ---------- */
 btnRedeem?.addEventListener("click", doRedeem);
 
-async function doRedeem(){
+async function doRedeem() {
   redeemMsg.textContent = "";
   const user = auth.currentUser;
   const dataCode = rCode.textContent;
+  
+  // Capturamos la sucursal seleccionada
+  const selectedStore = rStoreSelect ? rStoreSelect.value : "";
+
   if (!user || !dataCode) return;
 
+  // Validación extra: Si por algún motivo el botón se activó sin sucursal
+  if (!selectedStore) {
+    toast("Debes seleccionar una sucursal obligatoriamente", "err");
+    return;
+  }
+
   const snap = await db.ref(`redeems/${dataCode}`).get();
-  if (!snap.exists()){
-    // ✅ Live Panel
+  if (!snap.exists()) {
     pushLiveEvent({
       type: "redeem_failed",
       status: "err",
       reason: "not_found",
       redeem: { code: dataCode }
-    }).catch(()=>{});
+    }).catch(() => {});
 
-    showAlert({title:"No encontrado", text:"El cupón ya no existe.", toneType:"err", canResume:true});
+    showAlert({ title: "No encontrado", text: "El cupón ya no existe.", toneType: "err", canResume: true });
     return;
   }
   const d = snap.val();
 
-  if (d.expiresAt && Date.now() > Number(d.expiresAt)){
-    logAttempt({ code: dataCode, userId: d.userId || null, outcome:"fail", reason:"expired" });
-
-    // ✅ Live Panel
+  // Validación de expiración
+  if (d.expiresAt && Date.now() > Number(d.expiresAt)) {
+    logAttempt({ code: dataCode, userId: d.userId || null, outcome: "fail", reason: "expired" });
     pushLiveEvent({
       type: "redeem_failed",
       status: "err",
       reason: "expired",
-      redeem: {
-        code: dataCode,
-        customerUid: d.userId || "",
-        rewardId: d.rewardId || "",
-        rewardName: d.rewardName || "",
-        cost: Number(d.cost||0),
-        expiresAt: d.expiresAt || null
-      }
-    }).catch(()=>{});
+      redeem: { code: dataCode, customerUid: d.userId || "", rewardName: d.rewardName || "", cost: Number(d.cost || 0), expiresAt: d.expiresAt || null }
+    }).catch(() => {});
 
-    showAlert({title:"Cupón vencido", text:"La cortesía ya expiró.", toneType:"err", canResume:true});
-    redeemMsg.textContent = "Cupón vencido."; return;
+    showAlert({ title: "Cupón vencido", text: "La cortesía ya expiró.", toneType: "err", canResume: true });
+    redeemMsg.textContent = "Cupón vencido.";
+    return;
   }
 
-  const st = String(d.status||"").toLowerCase();
-  if (st !== "pending" && st !== "pendiente"){
-    logAttempt({ code: dataCode, userId: d.userId || null, outcome:"fail", reason:"already_redeemed" });
-
-    // ✅ Live Panel
+  // Validación de estado
+  const st = String(d.status || "").toLowerCase();
+  if (st !== "pending" && st !== "pendiente") {
+    logAttempt({ code: dataCode, userId: d.userId || null, outcome: "fail", reason: "already_redeemed" });
     pushLiveEvent({
       type: "redeem_failed",
       status: "warn",
       reason: "already_redeemed",
-      redeem: {
-        code: dataCode,
-        customerUid: d.userId || "",
-        rewardId: d.rewardId || "",
-        rewardName: d.rewardName || "",
-        cost: Number(d.cost||0),
-        status: d.status || ""
-      }
-    }).catch(()=>{});
+      redeem: { code: dataCode, customerUid: d.userId || "", rewardName: d.rewardName || "", cost: Number(d.cost || 0), status: d.status || "" }
+    }).catch(() => {});
 
-    showAlert({title:"Cupón ya canjeado", text:"Este código ya fue canjeado.", toneType:"warn", canResume:true});
-    redeemMsg.textContent = "El cupón ya fue canjeado."; return;
+    showAlert({ title: "Cupón ya canjeado", text: "Este código ya fue canjeado.", toneType: "warn", canResume: true });
+    redeemMsg.textContent = "El cupón ya fue canjeado.";
+    return;
   }
 
-  const note = (rNote.value||"").trim();
+  const note = (rNote.value || "").trim();
   const now = Date.now();
   const updates = {};
 
-  updates[`/redeems/${dataCode}/status`]     = "redeemed";
+  // 1. Actualización en la tabla maestra de cupones (Añadimos 'store')
+  updates[`/redeems/${dataCode}/status`] = "redeemed";
   updates[`/redeems/${dataCode}/redeemedAt`] = now;
   updates[`/redeems/${dataCode}/redeemedBy`] = user.uid;
+  updates[`/redeems/${dataCode}/store`] = selectedStore; // <--- SUCURSAL
   if (note) updates[`/redeems/${dataCode}/note`] = note;
 
+  // 2. Actualización en el historial del usuario (Añadimos 'store')
   if (d.userId) {
-    updates[`/users/${d.userId}/redemptions/${dataCode}/status`]     = "canjeado";
+    updates[`/users/${d.userId}/redemptions/${dataCode}/status`] = "canjeado";
     updates[`/users/${d.userId}/redemptions/${dataCode}/redeemedAt`] = now;
     updates[`/users/${d.userId}/redemptions/${dataCode}/redeemedBy`] = user.uid;
+    updates[`/users/${d.userId}/redemptions/${dataCode}/store`] = selectedStore; // <--- SUCURSAL
     if (note) updates[`/users/${d.userId}/redemptions/${dataCode}/note`] = note;
   }
 
+  // 3. Registro en la bitácora global (Añadimos 'store')
   const logKey = db.ref("redeemLogs").push().key;
   updates[`/redeemLogs/${logKey}`] = {
     code: dataCode,
     rewardId: d.rewardId || null,
     rewardName: d.rewardName || null,
-    cost: Number(d.cost||0),
+    cost: Number(d.cost || 0),
     userId: d.userId || null,
     redeemedBy: user.uid,
     redeemedByEmail: user.email || null,
+    store: selectedStore, // <--- SUCURSAL
     note: note || null,
     ts: now,
     status: "canjeado"
   };
 
   btnRedeem.disabled = true;
+
   try {
     await db.ref().update(updates);
-    logAttempt({ code: dataCode, userId: d.userId || null, outcome:"ok", reason:"redeemed" });
+    logAttempt({ code: dataCode, userId: d.userId || null, outcome: "ok", reason: "redeemed" });
 
-    // ✅ Live Panel: CANJE OK (lo principal)
+    // ✅ Live Panel: Incluimos la sucursal en el evento en vivo
     await pushLiveEvent({
       type: "redeem_validated",
       status: "ok",
@@ -622,15 +643,14 @@ async function doRedeem(){
       redeem: {
         code: dataCode,
         customerUid: d.userId || "",
-        rewardId: d.rewardId || "",
         rewardName: d.rewardName || "",
-        cost: Number(d.cost||0),
-        expiresAt: d.expiresAt || null,
+        cost: Number(d.cost || 0),
+        store: selectedStore, // <--- SUCURSAL
         note: note || ""
       }
     });
 
-    toast("¡Canje realizado!", "ok");
+    toast(`¡Canje en ${selectedStore} realizado!`, "ok");
     redeemMsg.textContent = "Canje exitoso.";
 
     const fresh = await db.ref(`redeems/${dataCode}`).get();
@@ -641,22 +661,14 @@ async function doRedeem(){
 
   } catch (e) {
     console.error(e);
-
-    // ✅ Live Panel: fallo update
     pushLiveEvent({
       type: "redeem_failed",
       status: "err",
       reason: "update_failed",
       manager: { uid: user.uid, email: user.email || "" },
-      redeem: {
-        code: dataCode,
-        customerUid: d.userId || "",
-        rewardId: d.rewardId || "",
-        rewardName: d.rewardName || "",
-        cost: Number(d.cost||0)
-      },
+      redeem: { code: dataCode, customerUid: d.userId || "", rewardName: d.rewardName || "" },
       error: String(e?.message || e || "")
-    }).catch(()=>{});
+    }).catch(() => {});
 
     redeemMsg.textContent = "No se pudo canjear.";
     btnRedeem.disabled = false;
@@ -776,4 +788,3 @@ function resetRedeemState(){
   miniQRWrap.hidden = true;
   if (miniQR) miniQR.innerHTML = "";
 }
-
