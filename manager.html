@@ -82,13 +82,16 @@
   </div>
 
   <div class="grid2">
-    <article class="card">
+        <article class="card">
       <h3>Escanear código QR</h3>
       <div id="qrRegion" class="qr-region"></div>
-      <div class="row mt8">
-        <select id="cameraSelect"></select>
-        <button id="btnStartScan" class="btn">Iniciar</button>
-        <button id="btnStopScan" class="btn ghost">Detener</button>
+      
+      <div class="grid mt12" style="display: grid; gap: 10px;">
+        <select id="cameraSelect" class="btn secondary"></select>
+        <div class="row" style="display: flex; gap: 10px;">
+          <button id="btnStartScan" class="btn primary w100">Iniciar Escáner</button>
+          <button id="btnStopScan" class="btn secondary w100">Detener</button>
+        </div>
       </div>
     </article>
 
@@ -108,11 +111,12 @@
         </div>
 
         <div class="details-grid">
-          <div><p class="label">Código</p><p class="mono" id="rCode">—</p></div>
-          <div><p class="label">Estado</p><p id="rStatus" class="status">—</p></div>
-          <div><p class="label">Expira</p><p id="rExpires">—</p></div>
-          <div><p class="label">Costo</p><p id="rCost">0</p></div>
-        </div>
+        <div><p class="label">Código</p><p class="mono" id="rCode">—</p></div>
+        <div><p class="label">Estado</p><p id="rStatus" class="status">—</p></div>
+        <div><p class="label">Expira</p><p id="rExpires">—</p></div>
+        <div><p class="label">Costo</p><p id="rCost">0</p></div>
+        <div><p class="label">Creado</p><p id="rCreated">—</p></div> 
+      </div>
         
         <p class="label">Cliente UID</p>
         <p class="mono small" id="rUser">—</p>
