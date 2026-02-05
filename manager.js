@@ -538,7 +538,9 @@ async function doRedeem() {
   const dataCode = rCode.textContent;
   
   // Capturamos la sucursal seleccionada
-  const selectedStore = rStoreSelect ? rStoreSelect.value : "";
+  // Capturamos el nombre completo (el texto que ve el gerente)
+const storeElement = document.getElementById("rStoreSelect");
+const selectedStore = storeElement.options[storeElement.selectedIndex].text;
 
   if (!user || !dataCode) return;
 
@@ -721,7 +723,8 @@ const rows = items.map(x => `
     <td>${x.ts ? new Date(x.ts).toLocaleString("es-MX",{dateStyle:"short",timeStyle:"short"}) : "—"}</td>
     <td class="mono">${x.code || ""}</td>
     <td>${x.rewardName || x.rewardId || ""}</td>
-    <td style="font-weight: bold; color: var(--warn);">${x.store || "—"}</td> <td>${Number(x.cost || 0)}</td>
+    <td style="font-weight: bold; color: #f39c12;">${x.store || "—"}</td> 
+    <td>${Number(x.cost || 0)}</td>
     <td class="mono" style="font-size: 0.8rem;">${x.userId || ""}</td>
     <td class="mono">${x.redeemedByEmail || x.redeemedBy || ""}</td>
     <td>${(x.status || "").toUpperCase()}</td>
