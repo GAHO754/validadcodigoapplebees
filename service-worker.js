@@ -2,22 +2,22 @@ const CACHE_NAME = "manager-pwa-v1";
 
 const ASSETS = [
   "/",
-  "/manager.html",
-  "/offline.html",
+  "manager.html",
+  "offline.html",
 
   // CSS
-  "/manager.css",
+  "manager.css",
 
   // JS
-  "/manager.js",
-  "/firebase-config.js",
+  "manager.js",
+  "firebase-config.js",
 
   // ICONOS
-  "/manzanas.png",
-  "/logo_anim_transparent.gif",
+  "manzanas.png",
+  "logo_anim_transparent.gif",
 
   // PWA
-  "/manifest.json"
+  "manifest.json"
 ];
 
 // instalar
