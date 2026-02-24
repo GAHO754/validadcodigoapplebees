@@ -1,7 +1,7 @@
 {
   "name": "Panel Manager",
   "short_name": "Manager",
-  "start_url": "/manager.html",
+  "start_url": "manager.html",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
