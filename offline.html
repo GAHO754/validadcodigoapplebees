@@ -18,5 +18,15 @@ body{
 <h1>Sin conexión</h1>
 <p>Revisa tu internet.</p>
 
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js")
+      .then(() => console.log("PWA instalada correctamente"))
+      .catch(err => console.log("Error PWA:", err));
+  });
+}
+</script>
 </body>
 </html>
