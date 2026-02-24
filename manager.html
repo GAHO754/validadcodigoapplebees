@@ -232,15 +232,33 @@
 </div>
 
 <script>
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js")
-      .then(() => console.log("PWA instalada correctamente"))
-      .catch(err => console.log("Error PWA:", err));
-  });
+function isIOS() {
+  return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+}
+
+function isInStandaloneMode() {
+  return ("standalone" in window.navigator) && (window.navigator.standalone);
+}
+
+if (isIOS() && !isInStandaloneMode()) {
+  const iosBanner = document.createElement("div");
+  iosBanner.innerHTML = `
+    📲 Para instalar la app:<br>
+    Presiona <b>Compartir</b> y luego <b>Agregar a pantalla de inicio</b>.
+  `;
+  iosBanner.style.position = "fixed";
+  iosBanner.style.bottom = "0";
+  iosBanner.style.left = "0";
+  iosBanner.style.right = "0";
+  iosBanner.style.background = "#111";
+  iosBanner.style.color = "white";
+  iosBanner.style.padding = "12px";
+  iosBanner.style.textAlign = "center";
+  iosBanner.style.zIndex = "9999";
+
+  document.body.appendChild(iosBanner);
 }
 </script>
-
 
 <script src="manager.js"></script>
 
