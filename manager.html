@@ -3,21 +3,32 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <!-- PWA -->
   <meta name="theme-color" content="#111317" />
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="manzanas.png">
+
   <title>Portal de Gerentes — Canje</title>
 
+  <!-- Icono -->
   <link rel="icon" type="image/png" sizes="32x32" href="manzanas.png">
+
+  <!-- CSS -->
   <link rel="stylesheet" href="manager.css" />
 
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
   <script src="firebase-config.js"></script>
 
+  <!-- Librerías -->
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
+
 
 <body class="bg">
 <noscript>Este portal requiere JavaScript.</noscript>
@@ -219,6 +230,17 @@
     <p class="muted mt8">Cerrar</p>
   </div>
 </div>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js")
+      .then(() => console.log("PWA instalada correctamente"))
+      .catch(err => console.log("Error PWA:", err));
+  });
+}
+</script>
+
 
 <script src="manager.js"></script>
 
